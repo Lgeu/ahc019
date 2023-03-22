@@ -1,4 +1,5 @@
 #include <array>
+#include <cassert>
 #include <iostream>
 #include <vector>
 
@@ -17,6 +18,11 @@ struct alignas(4) Vec3 {
     Vec3(i8 x, i8 y, i8 z) : x(x), y(y), z(z) {}
     Vec3 operator+(Vec3& rhs) const {
         return Vec3(x + rhs.x, y + rhs.y, z + rhs.z);
+    }
+    const auto& operator[](const int idx) const {
+        assert(idx >= 0);
+        assert(idx < 3);
+        return idx == 0 ? x : idx == 1 ? y : z;
     }
 };
 
@@ -47,7 +53,7 @@ static Input input;
 namespace info {
 
 static array<int, 2> n_nodes;
-static array<Cube<int>, 2> coord_to_node_id;
+static array<Cube<short>, 2> coord_to_node_id;
 static array<vector<Vec3>, 2> node_id_to_coord;
 
 struct Node {
@@ -55,7 +61,7 @@ struct Node {
 };
 
 struct Edge {
-    array<int, 2> node_ids;
+    array<short, 2> node_ids;
     array<int, 6> neighboring_edge_ids;
     int edge_group_id;
 };
@@ -66,8 +72,14 @@ struct EdgeGroup {
 
 static vector<Edge> edges;
 static vector<EdgeGroup> edge_groups;
+static array<array<vector<int>, 14 * 14 * 14 / 2>, 2>
+    candidate_edge_ids_for_each_node; // TODO: スタックにする
 
 static void Init() {
+    for (auto a : candidate_edge_ids_for_each_node)
+        for (auto b : a)
+            fill(b.begin(), b.end(), -1);
+
     const auto& D = input.D;
     n_nodes = {};
 
@@ -75,7 +87,6 @@ static void Init() {
         return input.fronts[i][v.z][v.x] && input.rights[i][v.z][v.y];
     };
     const auto ok0 = [&check_ok](const Vec3& v) { return check_ok(0, v); };
-    const auto ok1 = [&check_ok](const Vec3& v) { return check_ok(1, v); };
 
     for (auto i = 0; i < 2; i++) {
         node_id_to_coord[i].clear();
@@ -95,10 +106,49 @@ static void Init() {
 
     // 辺を構築
     edges.clear();
-    auto tmp_edges = edges;
+    auto tmp_edges = vector<pair<short, short>>();
     auto tmp_edge_groups = vector<pair<int, int>>();
     edge_groups.clear();
-    {
+    for (auto p : {
+             array<int, 6>{0, 1, 2, 0, 0, 0},
+             {0, 1, 2, 0, 1, 1},
+             {0, 1, 2, 1, 0, 1},
+             {0, 1, 2, 1, 1, 0},
+             {1, 2, 0, 0, 0, 0},
+             {1, 2, 0, 0, 1, 1},
+             {1, 2, 0, 1, 0, 1},
+             {1, 2, 0, 1, 1, 0},
+             {2, 0, 1, 0, 0, 0},
+             {2, 0, 1, 0, 1, 1},
+             {2, 0, 1, 1, 0, 1},
+             {2, 0, 1, 1, 1, 0},
+             {0, 2, 1, 0, 0, 1},
+             {0, 2, 1, 0, 1, 0},
+             {0, 2, 1, 1, 0, 0},
+             {0, 2, 1, 1, 1, 1},
+             {1, 0, 2, 0, 0, 1},
+             {1, 0, 2, 0, 1, 0},
+             {1, 0, 2, 1, 0, 0},
+             {1, 0, 2, 1, 1, 1},
+             {2, 1, 0, 0, 0, 1},
+             {2, 1, 0, 0, 1, 0},
+             {2, 1, 0, 1, 0, 0},
+             {2, 1, 0, 1, 1, 1},
+         }) {
+        auto coord_to_rotated_node_id = Cube<short>();
+        for (auto x = 0; x < D; x++) {
+            for (auto y = 0; y < D; y++) {
+                for (auto z = 0; z < D; z++) {
+                    const auto xyz = Vec3(x, y, z);
+                    const auto tx = p[3] ? D - 1 - xyz[p[0]] : xyz[p[0]];
+                    const auto ty = p[4] ? D - 1 - xyz[p[1]] : xyz[p[1]];
+                    const auto tz = p[5] ? D - 1 - xyz[p[2]] : xyz[p[2]];
+                    coord_to_rotated_node_id[x][y][z] =
+                        coord_to_node_id[1][tx][ty][tz];
+                }
+            }
+        }
+
         auto b = Vec3{};
 
         auto para = Vec3{};
@@ -116,9 +166,10 @@ static void Init() {
                                 if (!ok0(Vec3(b.x + max(+para.x, 0),
                                               b.y + max(+para.y, 0),
                                               b.z + max(+para.z, 0))) ||
-                                    !ok1(Vec3(b.x + max(-para.x, 0),
-                                              b.y + max(-para.y, 0),
-                                              b.z + max(-para.z, 0))))
+                                    coord_to_rotated_node_id
+                                            [b.x + max(-para.x, 0)]
+                                            [b.y + max(-para.y, 0)]
+                                            [b.z + max(-para.z, 0)] == -1)
                                     visited[b.x][b.y][b.z] = true;
                             }
                         }
@@ -187,20 +238,15 @@ static void Init() {
                                                                  right - left);
                                 for (auto i = 0; i < right; i++) {
                                     const auto& v = q[i];
-                                    tmp_edges.push_back(
-                                        {{
-                                             coord_to_node_id
-                                                 [0][v.x + max(+para.x, 0)]
-                                                 [v.y + max(+para.y, 0)]
-                                                 [v.z + max(+para.z, 0)],
-                                             coord_to_node_id
-                                                 [1][v.x + max(-para.x, 0)]
-                                                 [v.y + max(-para.y, 0)]
-                                                 [v.z + max(-para.z, 0)],
-                                         },
-                                         {}, // neightbour は後で
-                                         -1} // group id も後で
-                                    );
+                                    tmp_edges.emplace_back(
+                                        coord_to_node_id[0]
+                                                        [v.x + max(+para.x, 0)]
+                                                        [v.y + max(+para.y, 0)]
+                                                        [v.z + max(+para.z, 0)],
+                                        coord_to_rotated_node_id
+                                            [v.x + max(-para.x, 0)]
+                                            [v.y + max(-para.y, 0)]
+                                            [v.z + max(-para.z, 0)]);
                                 }
                             }
                         }
@@ -208,12 +254,56 @@ static void Init() {
                 }
             }
         }
-        // TODO: 回転
         cerr << "tmp_edge_groups.size()=" << tmp_edge_groups.size() << endl;
         cerr << "tmp_edges.size()=" << tmp_edges.size() << endl;
     }
 
+    sort(tmp_edge_groups.begin(), tmp_edge_groups.end(),
+         [](const pair<int, int> a, const pair<int, int> b) {
+             return a.second - a.first > b.second - b.first;
+         });
+
     // 各頂点に対して、それを含むgroupの中で、サイズが大きい上位何個かを取り出す
+    const auto n_candidate_edges_for_node = 50;
+    auto n_candidate_groups = array<array<int, 14 * 14 * 14 / 2>, 2>();
+    auto all_candidate_tmp_groups = vector<int>();
+
+    for (auto idx_groups = 0; idx_groups < (int)tmp_edge_groups.size();
+         idx_groups++) {
+        const auto [l, r] = tmp_edge_groups[idx_groups];
+        auto use = false;
+        for (auto i = l; i < r; i++) {
+            if (n_candidate_groups[0][tmp_edges[i].first] <
+                n_candidate_edges_for_node)
+                n_candidate_groups[0][tmp_edges[i].first]++, use = true;
+            if (n_candidate_groups[1][tmp_edges[i].second] <
+                n_candidate_edges_for_node)
+                n_candidate_groups[1][tmp_edges[i].second]++, use = true;
+        }
+        if (use)
+            all_candidate_tmp_groups.push_back(idx_groups);
+    }
+    for (auto group_id = 0; group_id < (int)all_candidate_tmp_groups.size();
+         group_id++) {
+        const auto& tmp_group = all_candidate_tmp_groups[group_id];
+        const auto [l, r] = tmp_edge_groups[tmp_group];
+        edge_groups.push_back({});
+        for (auto i = l; i < r; i++) {
+            const auto edge_id = (int)edges.size();
+            edge_groups.back().edge_ids.push_back(edge_id);
+            const auto e = tmp_edges[i];
+            if (candidate_edge_ids_for_each_node[0][e.first].size() <
+                n_candidate_edges_for_node)
+                candidate_edge_ids_for_each_node[0][e.first].push_back(edge_id);
+            if (candidate_edge_ids_for_each_node[1][e.second].size() <
+                n_candidate_edges_for_node)
+                candidate_edge_ids_for_each_node[1][e.second].push_back(
+                    edge_id);
+            edges.push_back({{e.first, e.second},
+                             {}, // TODO: neighboring_edge_ids
+                             group_id});
+        }
+    }
 }
 
 } // namespace info
