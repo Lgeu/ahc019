@@ -1,5 +1,6 @@
 #include <array>
 #include <cassert>
+#include <cstring>
 #include <iostream>
 #include <vector>
 
@@ -7,21 +8,26 @@ using namespace std;
 
 using i8 = signed char;
 
-struct alignas(4) Vec3 {
-    i8 x, y, z;
-    Vec3() = default;
-    Vec3(i8 x, i8 y, i8 z) : x(x), y(y), z(z) {}
-    Vec3 operator+(Vec3& rhs) const {
-        return Vec3(x + rhs.x, y + rhs.y, z + rhs.z);
+template <typename T, int max_size> struct Stack {
+    // T は memcpy でコピーできてデストラクタを呼ぶ必要が無いことを仮定
+    using value_type = T;
+    int siz;
+    array<T, max_size> arr;
+    Stack() = default;
+    Stack(const Stack& rhs) {
+        siz = rhs.siz;
+        memcpy(&*arr.begin(), &*rhs.arr.begin(), rhs.siz * sizeof(T));
     }
-    const auto& operator[](const int idx) const {
-        assert(idx >= 0);
-        assert(idx < 3);
-        return idx == 0 ? x : idx == 1 ? y : z;
+    Stack& operator=(const Stack& rhs) {
+        siz = rhs.siz;
+        memcpy(&*arr.begin(), &*rhs.arr.begin(), rhs.siz * sizeof(T));
     }
-    void Print(ostream& os) const {
-        os << (int)x << "," << (int)y << "," << (int)z;
+    void push_back(const T& value) {
+        assert(siz < max_size);
+        arr[siz++] = value;
     }
+    size_t size() const { return siz; }
+    void clear() { siz = 0; }
 };
 
 struct Input {
@@ -48,6 +54,26 @@ struct Input {
 
 static Input input;
 
+struct alignas(4) Vec3 {
+    i8 x, y, z;
+    Vec3() = default;
+    Vec3(i8 x, i8 y, i8 z) : x(x), y(y), z(z) {}
+    Vec3 operator+(const Vec3& rhs) const {
+        return Vec3(x + rhs.x, y + rhs.y, z + rhs.z);
+    }
+    const auto& operator[](const int idx) const {
+        assert(idx >= 0);
+        assert(idx < 3);
+        return idx == 0 ? x : idx == 1 ? y : z;
+    }
+    bool IsIn() const {
+        const auto& D = input.D;
+        return 0 <= x && x < D && 0 <= y && y < D && 0 <= z && z < D;
+    }
+    void Print(ostream& os) const {
+        os << (int)x << "," << (int)y << "," << (int)z;
+    }
+};
 template <typename T> struct Cube : array<array<array<T, 14>, 14>, 14> {
     void Visualize(ostream& os = cout) const {
         const auto& D = input.D;
@@ -72,8 +98,12 @@ struct Node {
 };
 
 struct Edge {
+    struct Neighbour {
+        int edge_id;
+        i8 direction;
+    };
     array<short, 2> node_ids;
-    array<int, 6> neighboring_edge_ids;
+    Stack<Neighbour, 6> neighbours;
     int edge_group_id;
 };
 
@@ -94,16 +124,17 @@ struct EdgeGroup {
         out[0].Visualize(os);
         out[1].Visualize(os);
     }
+    auto size() const { return edge_ids.size(); }
 };
 
 static vector<EdgeGroup> edge_groups;
-static array<array<vector<int>, 14 * 14 * 14 / 2>, 2>
-    candidate_edge_ids_for_each_node; // TODO: スタックにする
+static array<array<Stack<int, 50>, 14 * 14 * 14 / 2>, 2>
+    candidate_edge_ids_for_each_node; // TODO: 50
 
 static void Init() {
-    for (auto a : candidate_edge_ids_for_each_node)
-        for (auto b : a)
-            fill(b.begin(), b.end(), -1);
+    for (auto&& a : candidate_edge_ids_for_each_node)
+        for (auto&& b : a)
+            b.clear();
 
     const auto& D = input.D;
     n_nodes = {};
@@ -295,7 +326,6 @@ static void Init() {
     for (auto idx_groups = 0; idx_groups < (int)tmp_edge_groups.size();
          idx_groups++) {
         const auto [l, r] = tmp_edge_groups[idx_groups];
-        // cerr << "lr=" << l << " " << r << endl;
         auto use = false;
         for (auto i = l; i < r; i++) {
             if (n_candidate_groups[0][tmp_edges[i].first] <
@@ -313,6 +343,10 @@ static void Init() {
         const auto& tmp_group = all_candidate_tmp_groups[group_id];
         const auto [l, r] = tmp_edge_groups[tmp_group];
         edge_groups.push_back({});
+        static auto visited = Cube<int>();
+        for (auto&& a : visited)
+            for (auto&& b : a)
+                fill(b.begin(), b.end(), -1);
         for (auto i = l; i < r; i++) {
             const auto edge_id = (int)edges.size();
             edge_groups.back().edge_ids.push_back(edge_id);
@@ -324,13 +358,35 @@ static void Init() {
                 n_candidate_edges_for_node)
                 candidate_edge_ids_for_each_node[1][e.second].push_back(
                     edge_id);
+            auto v = node_id_to_coord[0][e.first];
+            visited[v.x][v.y][v.z] = edge_id;
             edges.push_back({{e.first, e.second},
                              {}, // TODO: neighboring_edge_ids
                              group_id});
+            for (const auto& [direction, dxyz] : {
+                     pair<i8, Vec3>{0, Vec3(0, 0, 1)},
+                     {1, Vec3(0, 0, -1)},
+                     {2, Vec3(0, 1, 0)},
+                     {3, Vec3(0, -1, 0)},
+                     {4, Vec3(1, 0, 0)},
+                     {5, Vec3(-1, 0, 0)},
+                 }) {
+                const auto u = v + dxyz;
+                if (u.IsIn()) {
+                    const auto neighbour_edge_id = visited[u.x][u.y][u.z];
+                    if (neighbour_edge_id != -1) {
+                        edges[edge_id].neighbours.push_back(
+                            {neighbour_edge_id, direction});
+                        edges[neighbour_edge_id].neighbours.push_back(
+                            {edge_id, (i8)(direction ^ 1)});
+                    }
+                }
+            }
         }
     }
 
     cerr << "edge_groups.size()=" << edge_groups.size() << endl;
+    cerr << "edge_groups[0].size()=" << edge_groups[0].size() << endl;
     for (const auto edge_id : edge_groups[0].edge_ids) {
         const auto& e = edges[edge_id];
         for (auto i = 0; i < 2; i++) {
@@ -352,7 +408,28 @@ static void Init() {
     info::Init();
 }
 
+struct State {
+    struct Core {
+        int edge_id;
+        array<bool, 6> dierction_priority;
+    };
+    Stack<Core, 200> cores;
+};
+
+static void Solve() {
+    // TODO
+
+    // TODO:
+    // そのcore集合で全部のシルエットを埋められるかを、bitboardで先に確認する
+
+    // 遷移
+    // core をランダム?に変更
+    // 埋めきれなかった場合、core を埋めきれなかった場所に追加
+    // 埋めきれた場合、小さいブロックの core を取り除く
+    // 古いやつとマージ
+}
+
 int main() {
     Init();
-    //
+    Solve();
 }
