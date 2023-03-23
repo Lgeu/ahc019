@@ -5,12 +5,7 @@
 
 using namespace std;
 
-// 回転 24 通りあるのか……
-// 平行 2d^3 通り
-
 using i8 = signed char;
-
-template <typename T> using Cube = array<array<array<T, 14>, 14>, 14>;
 
 struct alignas(4) Vec3 {
     i8 x, y, z;
@@ -23,6 +18,9 @@ struct alignas(4) Vec3 {
         assert(idx >= 0);
         assert(idx < 3);
         return idx == 0 ? x : idx == 1 ? y : z;
+    }
+    void Print(ostream& os) const {
+        os << (int)x << "," << (int)y << "," << (int)z;
     }
 };
 
@@ -50,6 +48,19 @@ struct Input {
 
 static Input input;
 
+template <typename T> struct Cube : array<array<array<T, 14>, 14>, 14> {
+    void Visualize(ostream& os = cout) const {
+        const auto& D = input.D;
+        for (auto x = 0; x < D; x++) {
+            for (auto y = 0; y < D; y++) {
+                for (auto z = 0; z < D; z++) {
+                    os << (*this)[x][y][z] << " ";
+                }
+            }
+        }
+        os << endl;
+    }
+};
 namespace info {
 
 static array<int, 2> n_nodes;
@@ -66,11 +77,25 @@ struct Edge {
     int edge_group_id;
 };
 
+static vector<Edge> edges;
 struct EdgeGroup {
     vector<int> edge_ids;
+    void Visualize(ostream& os = cout) const {
+        auto out = array<Cube<int>, 2>();
+        for (const auto edge_id : edge_ids) {
+            const auto& e = edges[edge_id];
+            for (auto i = 0; i < 2; i++) {
+                const auto node_id = e.node_ids[i];
+                const auto v = node_id_to_coord[i][node_id];
+                out[i][v.x][v.y][v.z] = 1;
+            }
+        }
+        os << 1 << endl;
+        out[0].Visualize(os);
+        out[1].Visualize(os);
+    }
 };
 
-static vector<Edge> edges;
 static vector<EdgeGroup> edge_groups;
 static array<array<vector<int>, 14 * 14 * 14 / 2>, 2>
     candidate_edge_ids_for_each_node; // TODO: スタックにする
@@ -233,9 +258,8 @@ static void Init() {
                                 }
                                 if (right < 5)
                                     continue;
-                                tmp_edge_groups.emplace_back(tmp_edges.size(),
-                                                             tmp_edges.size() +
-                                                                 right - left);
+                                tmp_edge_groups.emplace_back(
+                                    tmp_edges.size(), tmp_edges.size() + right);
                                 for (auto i = 0; i < right; i++) {
                                     const auto& v = q[i];
                                     tmp_edges.emplace_back(
@@ -271,6 +295,7 @@ static void Init() {
     for (auto idx_groups = 0; idx_groups < (int)tmp_edge_groups.size();
          idx_groups++) {
         const auto [l, r] = tmp_edge_groups[idx_groups];
+        // cerr << "lr=" << l << " " << r << endl;
         auto use = false;
         for (auto i = l; i < r; i++) {
             if (n_candidate_groups[0][tmp_edges[i].first] <
@@ -304,6 +329,20 @@ static void Init() {
                              group_id});
         }
     }
+
+    cerr << "edge_groups.size()=" << edge_groups.size() << endl;
+    for (const auto edge_id : edge_groups[0].edge_ids) {
+        const auto& e = edges[edge_id];
+        for (auto i = 0; i < 2; i++) {
+            const auto node_id = e.node_ids[i];
+            const auto v = node_id_to_coord[i][node_id];
+            v.Print(cerr);
+            cerr << " ";
+        }
+        cerr << endl;
+    }
+    edge_groups[0].Visualize();
+    edge_groups[1].Visualize();
 }
 
 } // namespace info
