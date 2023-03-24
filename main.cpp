@@ -3,10 +3,13 @@
 #include <cstring>
 #include <iostream>
 #include <vector>
+#include <x86intrin.h>
 
 using namespace std;
 
 using i8 = signed char;
+using ll = long long;
+using ull = unsigned long long;
 
 template <typename T, int max_size> struct Stack {
     // T は memcpy でコピーできてデストラクタを呼ぶ必要が無いことを仮定
@@ -32,21 +35,23 @@ template <typename T, int max_size> struct Stack {
 
 struct Input {
     int D;
-    array<array<array<bool, 14>, 14>, 2> fronts;
-    array<array<array<bool, 14>, 14>, 2> rights;
+    int n_pixels;
+    array<array<array<short, 14>, 14>, 2> fronts;
+    array<array<array<short, 14>, 14>, 2> rights;
     void Read() {
         cin >> D;
         string s;
+        n_pixels = 0;
         for (auto i = 0; i < 2; i++) {
             for (auto y = 0; y < D; y++) {
                 cin >> s;
                 for (auto x = 0; x < D; x++)
-                    fronts[i][y][x] = s[x] == '1';
+                    fronts[i][y][x] = s[x] == '1' ? n_pixels++ : -1;
             }
             for (auto y = 0; y < D; y++) {
                 cin >> s;
                 for (auto x = 0; x < D; x++)
-                    rights[i][y][x] = s[x] == '1';
+                    rights[i][y][x] = s[x] == '1' ? n_pixels++ : -1;
             }
         }
     }
@@ -55,11 +60,11 @@ struct Input {
 static Input input;
 
 struct alignas(4) Vec3 {
-    i8 x, y, z;
+    i8 x, y, z, w;
     Vec3() = default;
-    Vec3(i8 x, i8 y, i8 z) : x(x), y(y), z(z) {}
+    Vec3(i8 x, i8 y, i8 z, i8 w = -1) : x(x), y(y), z(z), w(w) {}
     Vec3 operator+(const Vec3& rhs) const {
-        return Vec3(x + rhs.x, y + rhs.y, z + rhs.z);
+        return Vec3(x + rhs.x, y + rhs.y, z + rhs.z, w);
     }
     const auto& operator[](const int idx) const {
         assert(idx >= 0);
@@ -91,11 +96,35 @@ namespace info {
 
 static array<int, 2> n_nodes;
 static array<Cube<short>, 2> coord_to_node_id;
-static array<vector<Vec3>, 2> node_id_to_coord;
 
 struct Node {
-    vector<int> edge_ids;
+    // vector<int> edge_ids;
+    array<short, 2> pixel_ids;
+    Vec3 coord;
 };
+
+struct Pixel {
+    Stack<short, 14> node_ids;
+};
+
+struct alignas(64) Silhouette {
+    array<ull, 8> data;
+
+    void Set(short i) { data[i / 64] |= 1ull << i % 64; }
+    void Reset(short i) { data[i / 64] ^= data[i / 64] & 1ull << i % 64; }
+    void clear() { data = {}; }
+    __m256i* AsM256i() { return (__m256i*)&data[0]; }
+    const __m256i* AsM256i() const { return (__m256i*)&data[0]; }
+    Silhouette& operator|=(const Silhouette& rhs) {
+        AsM256i()[0] = _mm256_or_si256(AsM256i()[0], rhs.AsM256i()[0]);
+        AsM256i()[1] = _mm256_or_si256(AsM256i()[1], rhs.AsM256i()[1]);
+        return *this;
+    }
+};
+
+static vector<Pixel> pixels;
+static vector<Node> nodes;
+static Silhouette full_silhouette;
 
 struct Edge {
     struct Neighbour {
@@ -105,18 +134,21 @@ struct Edge {
     array<short, 2> node_ids;
     Stack<Neighbour, 6> neighbours;
     int edge_group_id;
+    Silhouette silhouette;
 };
 
 static vector<Edge> edges;
+
 struct EdgeGroup {
     vector<int> edge_ids;
+    Silhouette silhouette; // TODO
     void Visualize(ostream& os = cout) const {
         auto out = array<Cube<int>, 2>();
         for (const auto edge_id : edge_ids) {
             const auto& e = edges[edge_id];
             for (auto i = 0; i < 2; i++) {
                 const auto node_id = e.node_ids[i];
-                const auto v = node_id_to_coord[i][node_id];
+                const auto v = nodes[node_id].coord;
                 out[i][v.x][v.y][v.z] = 1;
             }
         }
@@ -140,18 +172,38 @@ static void Init() {
     n_nodes = {};
 
     const auto check_ok = [](const int i, const Vec3& v) {
-        return input.fronts[i][v.z][v.x] && input.rights[i][v.z][v.y];
+        return input.fronts[i][v.z][v.x] != -1 &&
+               input.rights[i][v.z][v.y] != -1;
     };
     const auto ok0 = [&check_ok](const Vec3& v) { return check_ok(0, v); };
 
+    // pixels
+    pixels.clear();
+    pixels.resize(input.n_pixels);
+    full_silhouette.clear();
+    for (auto i = 0; i < input.n_pixels; i++)
+        full_silhouette.Set(i);
+
+    // nodes
+    nodes.clear();
     for (auto i = 0; i < 2; i++) {
-        node_id_to_coord[i].clear();
-        for (auto x = (i8)0; x < D; x++) {
-            for (auto y = (i8)0; y < D; y++) {
-                for (auto z = (i8)0; z < D; z++) {
-                    if (check_ok(i, {x, y, z})) {
-                        coord_to_node_id[i][x][y][z] = n_nodes[i]++;
-                        node_id_to_coord[i].push_back({x, y, z});
+        for (auto x = 0; x < D; x++) {
+            for (auto y = 0; y < D; y++) {
+                for (auto z = 0; z < D; z++) {
+                    if (input.fronts[i][z][x] != -1 &&
+                        input.rights[i][z][y] != -1) {
+                        n_nodes[i]++;
+                        coord_to_node_id[i][x][y][z] = nodes.size();
+                        const auto pixel_ids = array<short, 2>{
+                            input.fronts[i][z][x], input.rights[i][z][y]};
+                        nodes.push_back({
+                            pixel_ids,
+                            Vec3(x, y, z, i),
+                        });
+                        for (const auto pixel_id : pixel_ids) {
+                            pixels[pixel_id].node_ids.push_back(nodes.size() -
+                                                                1);
+                        }
                     } else {
                         coord_to_node_id[i][x][y][z] = -1;
                     }
@@ -343,13 +395,13 @@ static void Init() {
         const auto& tmp_group = all_candidate_tmp_groups[group_id];
         const auto [l, r] = tmp_edge_groups[tmp_group];
         edge_groups.push_back({});
+        auto& edge_group = edge_groups.back();
         static auto visited = Cube<int>();
         for (auto&& a : visited)
             for (auto&& b : a)
                 fill(b.begin(), b.end(), -1);
         for (auto i = l; i < r; i++) {
             const auto edge_id = (int)edges.size();
-            edge_groups.back().edge_ids.push_back(edge_id);
             const auto e = tmp_edges[i];
             if (candidate_edge_ids_for_each_node[0][e.first].size() <
                 n_candidate_edges_for_node)
@@ -358,11 +410,20 @@ static void Init() {
                 n_candidate_edges_for_node)
                 candidate_edge_ids_for_each_node[1][e.second].push_back(
                     edge_id);
-            auto v = node_id_to_coord[0][e.first];
+            auto v = nodes[e.first].coord;
             visited[v.x][v.y][v.z] = edge_id;
-            edges.push_back({{e.first, e.second},
-                             {}, // TODO: neighboring_edge_ids
-                             group_id});
+            auto silhouette = Silhouette{};
+            for (const auto node_id : {e.first, e.second})
+                for (const auto pixel_id : nodes[node_id].pixel_ids)
+                    silhouette.Set(pixel_id);
+            edges.push_back({
+                {e.first, e.second},
+                {}, // neighboring_edge_ids
+                group_id,
+                silhouette,
+            });
+            edge_group.edge_ids.push_back(edge_id);
+            edge_group.silhouette |= silhouette;
             for (const auto& [direction, dxyz] : {
                      pair<i8, Vec3>{0, Vec3(0, 0, 1)},
                      {1, Vec3(0, 0, -1)},
@@ -391,7 +452,7 @@ static void Init() {
         const auto& e = edges[edge_id];
         for (auto i = 0; i < 2; i++) {
             const auto node_id = e.node_ids[i];
-            const auto v = node_id_to_coord[i][node_id];
+            const auto v = nodes[node_id].coord;
             v.Print(cerr);
             cerr << " ";
         }
@@ -433,3 +494,6 @@ int main() {
     Init();
     Solve();
 }
+
+// 集合被覆問題
+// * 集合全部使えるとは限らない
