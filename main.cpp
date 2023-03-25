@@ -2,14 +2,37 @@
 #include <cassert>
 #include <cstring>
 #include <iostream>
+#include <numeric>
+#include <random>
 #include <vector>
 #include <x86intrin.h>
 
 using namespace std;
 
 using i8 = signed char;
+using u8 = unsigned char;
 using ll = long long;
 using ull = unsigned long long;
+
+auto rng = mt19937(42);
+
+static inline int CountRightZero(const ull x) {
+#ifdef _MSC_VER
+    unsigned long r;
+    _BitScanForward64(&r, x);
+    return (int)r;
+#else
+    return __builtin_ctzll(x);
+#endif
+}
+
+static inline int PopCount(const ull x) {
+#ifdef _MSC_VER
+    return (int)__popcnt64(x);
+#else
+    return __builtin_popcountll(x);
+#endif
+}
 
 template <typename T, int max_size> struct Stack {
     // T は memcpy でコピーできてデストラクタを呼ぶ必要が無いことを仮定
@@ -24,6 +47,7 @@ template <typename T, int max_size> struct Stack {
     Stack& operator=(const Stack& rhs) {
         siz = rhs.siz;
         memcpy(&*arr.begin(), &*rhs.arr.begin(), rhs.siz * sizeof(T));
+        return *this;
     }
     void push_back(const T& value) {
         assert(siz < max_size);
@@ -31,6 +55,42 @@ template <typename T, int max_size> struct Stack {
     }
     size_t size() const { return siz; }
     void clear() { siz = 0; }
+    const T& operator[](const int idx) const { return arr[idx]; }
+    const T* begin() const { return &*arr.begin(); }
+    const T* end() const { return begin() + siz; }
+};
+
+template <typename T, int buffer_size, int initial_offset = buffer_size / 2>
+struct Queue {
+    using value_type = T;
+    int left, right;
+    array<T, buffer_size> arr;
+    Queue() : left(initial_offset), right(initial_offset), arr() {}
+    Queue(const Queue& rhs) {
+        left = rhs.left;
+        right = rhs.right;
+        memcpy(&*arr.begin() + rhs.left, &*rhs.arr.begin() + rhs.left,
+               (rhs.right - rhs.left) * sizeof(T));
+    }
+    void push_back(const T& value) {
+        assert(right < buffer_size);
+        arr[right++] = value;
+    }
+    void push_front(const T& value) {
+        assert(left > 0);
+        arr[--left] = value;
+    }
+    T& front() { return arr[left]; }
+    void pop_front() {
+        assert(left != right);
+        left++;
+    }
+    size_t size() const { return right - left; }
+    bool empty() const { return right == left; }
+    void clear() {
+        left = 0;
+        right = 0;
+    }
 };
 
 struct Input {
@@ -105,6 +165,7 @@ struct Node {
 
 struct Pixel {
     Stack<short, 14> node_ids;
+    vector<int> edge_ids;
 };
 
 struct alignas(64) Silhouette {
@@ -115,10 +176,49 @@ struct alignas(64) Silhouette {
     void clear() { data = {}; }
     __m256i* AsM256i() { return (__m256i*)&data[0]; }
     const __m256i* AsM256i() const { return (__m256i*)&data[0]; }
-    Silhouette& operator|=(const Silhouette& rhs) {
+    const u8* AsU8() const { return (u8*)&data[0]; }
+    inline Silhouette& operator|=(const Silhouette& rhs) {
         AsM256i()[0] = _mm256_or_si256(AsM256i()[0], rhs.AsM256i()[0]);
         AsM256i()[1] = _mm256_or_si256(AsM256i()[1], rhs.AsM256i()[1]);
         return *this;
+    }
+    inline Silhouette& operator^=(const Silhouette& rhs) {
+        AsM256i()[0] = _mm256_xor_si256(AsM256i()[0], rhs.AsM256i()[0]);
+        AsM256i()[1] = _mm256_xor_si256(AsM256i()[1], rhs.AsM256i()[1]);
+        return *this;
+    }
+    inline Silhouette& operator&=(const Silhouette& rhs) {
+        AsM256i()[0] = _mm256_and_si256(AsM256i()[0], rhs.AsM256i()[0]);
+        AsM256i()[1] = _mm256_and_si256(AsM256i()[1], rhs.AsM256i()[1]);
+        return *this;
+    }
+    inline Silhouette& AndNotAssign(const Silhouette& rhs) {
+        AsM256i()[0] = _mm256_andnot_si256(rhs.AsM256i()[0], AsM256i()[0]);
+        AsM256i()[1] = _mm256_andnot_si256(rhs.AsM256i()[1], AsM256i()[1]);
+        return *this;
+    }
+    inline bool empty() const {
+        auto tmp = _mm256_or_si256(AsM256i()[0], AsM256i()[1]);
+        return _mm256_testz_si256(tmp, tmp);
+    }
+    inline int CountRightZero() const {
+        // empty で無いことを仮定
+        const __m256i x0 = _mm256_cmpeq_epi8(
+            AsM256i()[0], _mm256_setzero_si256()); // 8bit x 32
+        const __m256i x1 =
+            _mm256_cmpeq_epi8(AsM256i()[1], _mm256_setzero_si256());
+        const auto nonzero_bytes = ~((ull)_mm256_movemask_epi8(x0) |
+                                     (ull)_mm256_movemask_epi8(x1) << 32);
+        assert(nonzero_bytes != 0);
+        const auto nonzero_byte = ::CountRightZero(nonzero_bytes);
+        return nonzero_byte * 8 + ::CountRightZero(AsU8()[nonzero_byte]);
+    }
+    inline int PopCount() const {
+        // 必要なら後で高速化
+        auto res = 0;
+        for (auto i = 0; i < 7; i++) // 7 まででいい
+            res += ::PopCount(data[i]);
+        return res;
     }
 };
 
@@ -141,7 +241,7 @@ static vector<Edge> edges;
 
 struct EdgeGroup {
     vector<int> edge_ids;
-    Silhouette silhouette; // TODO
+    Silhouette silhouette;
     void Visualize(ostream& os = cout) const {
         auto out = array<Cube<int>, 2>();
         for (const auto edge_id : edge_ids) {
@@ -414,8 +514,10 @@ static void Init() {
             visited[v.x][v.y][v.z] = edge_id;
             auto silhouette = Silhouette{};
             for (const auto node_id : {e.first, e.second})
-                for (const auto pixel_id : nodes[node_id].pixel_ids)
+                for (const auto pixel_id : nodes[node_id].pixel_ids) {
                     silhouette.Set(pixel_id);
+                    pixels[pixel_id].edge_ids.push_back(edge_id);
+                }
             edges.push_back({
                 {e.first, e.second},
                 {}, // neighboring_edge_ids
@@ -472,10 +574,174 @@ static void Init() {
 struct State {
     struct Core {
         int edge_id;
-        array<bool, 6> dierction_priority;
+        array<bool, 6>
+            dierction_priority; // bfsじゃなくてもっと賢くすればこれ要らんか？
     };
     Stack<Core, 200> cores;
+
+    auto SCPCovered() const {
+        auto silhouette = info::Silhouette();
+        for (const auto& core : cores)
+            silhouette |=
+                info::edge_groups[info::edges[core.edge_id].edge_group_id]
+                    .silhouette;
+        return silhouette;
+    }
+
+    void Update() {
+        // TODO
+    }
+
+    std::array<short, 5488>& Greedy() {
+        auto scp_not_covered = info::full_silhouette;
+        scp_not_covered ^= SCPCovered();
+
+        // SCP を貪欲に解く
+        while (!scp_not_covered.empty()) {
+            auto best_edge_group_id = -100;
+            auto best_value = 0;
+            for (auto edge_group_id = 0;
+                 edge_group_id < (int)info::edge_groups.size();
+                 edge_group_id++) {
+                auto edge_group_silhouette =
+                    info::edge_groups[edge_group_id].silhouette;
+                edge_group_silhouette &= scp_not_covered;
+                const auto pc = edge_group_silhouette.PopCount();
+                if (best_value < pc) {
+                    best_value = pc;
+                    best_edge_group_id = edge_group_id;
+                }
+            }
+            const auto& best_edge_group = info::edge_groups[best_edge_group_id];
+            scp_not_covered.AndNotAssign(best_edge_group.silhouette);
+
+            while (true) {
+                const auto r = uniform_int_distribution<>(
+                    0, best_edge_group.size() - 1)(rng);
+                const auto edge_id = best_edge_group.edge_ids[r];
+                const auto& edge = info::edges[edge_id];
+                for (const auto& core : cores)
+                    for (const auto core_node_id :
+                         info::edges[core.edge_id].node_ids)
+                        for (const auto new_node_id : edge.node_ids)
+                            if (core_node_id == new_node_id)
+                                goto fail;
+                cores.push_back({
+                    edge_id,
+                    {true, true, true, true, true, true},
+                });
+                break;
+            fail:;
+            }
+        }
+
+        // 01BFS で広げてく
+        while (true) {
+            auto visited_silhouette = info::Silhouette();
+            static auto visited_nodes = array<short, 14 * 14 * 14 * 2>();
+            fill(visited_nodes.begin(),
+                 visited_nodes.begin() + info::nodes.size(), -1);
+            struct QueueElement {
+                int edge_id;
+            };
+            static auto qs = vector<Queue<QueueElement, 14 * 14 * 14 / 2>>();
+            if (qs.size() < cores.size())
+                qs.resize(cores.size());
+            for (auto core_id = 0; core_id < (int)cores.size(); core_id++) {
+                const auto edge_id = cores[core_id].edge_id;
+                const auto& edge = info::edges[edge_id];
+                qs[core_id].clear();
+                qs[core_id].push_back({edge_id});
+                visited_silhouette |= edge.silhouette;
+                for (const auto node_id : edge.node_ids) {
+                    assert(visited_nodes[node_id] == -1);
+                    visited_nodes[node_id] = core_id;
+                }
+            }
+            auto next_core_id = vector<short>(cores.size());
+            iota(next_core_id.begin(), next_core_id.end() - 1, 1);
+            next_core_id.back() = 0;
+            auto last_core_id = (short)-1;
+            for (auto core_id = 0;; core_id = next_core_id[core_id]) {
+                const auto& core = cores[core_id];
+                auto& q = qs[core_id];
+                assert(!q.empty());
+                int edge_id;
+                while (!q.empty()) {
+                    edge_id = q.front().edge_id;
+                    q.pop_front();
+                    const auto& edge = info::edges[edge_id];
+                    if (visited_nodes[edge.node_ids[0]] == -1 ||
+                        visited_nodes[edge.node_ids[1]] == -1)
+                        goto ok;
+                }
+                next_core_id[last_core_id] = next_core_id[core_id];
+                if (next_core_id[core_id] == core_id)
+                    break;
+                continue;
+            ok:;
+                {
+                    const auto& edge = info::edges[edge_id];
+                    visited_nodes[edge.node_ids[0]] = core_id;
+                    visited_nodes[edge.node_ids[1]] = core_id;
+                    visited_silhouette |= edge.silhouette;
+                    for (const auto& neighbour : edge.neighbours) {
+                        if (core.dierction_priority[neighbour.direction]) {
+                            q.push_back({neighbour.edge_id});
+                        } else {
+                            q.push_front({neighbour.edge_id});
+                        }
+                    }
+                    if (q.empty()) { // ほとんど起こらないはず
+                        next_core_id[last_core_id] = next_core_id[core_id];
+                        if (next_core_id[core_id] == core_id)
+                            break;
+                        continue;
+                    }
+                    last_core_id = core_id;
+                }
+            }
+            // BFS が終わり、全部のシルエット条件を満たしたか確認
+            auto non_visited_silhouette = visited_silhouette;
+            non_visited_silhouette ^= info::full_silhouette;
+            if (non_visited_silhouette.empty()) {
+                return visited_nodes;
+            }
+            // 満たしていない pixel のところに edge を追加
+            const auto pixel_id = non_visited_silhouette.CountRightZero();
+            const auto& pixel = info::pixels[pixel_id];
+            for (const auto new_edge_id : pixel.edge_ids) {
+                for (const auto& core : cores)
+                    for (const auto core_node_id :
+                         info::edges[core.edge_id].node_ids)
+                        for (const auto new_node_id :
+                             info::edges[new_edge_id].node_ids)
+                            if (core_node_id == new_node_id)
+                                goto fail2;
+                cores.push_back({
+                    new_edge_id,
+                    {true, true, true, true, true, true},
+                });
+                goto ok2;
+            fail2:;
+            }
+            assert(false);
+        ok2:;
+        }
+    }
 };
+
+// TODO: デバッグ
+static void SolveGreedy() {
+    auto state = State();
+    auto blocks = state.Greedy();
+    auto puzzle = Cube<int>();
+    for (auto node_id = 0; node_id < (int)info::nodes.size(); node_id++) {
+        const auto& p = info::nodes[node_id].coord;
+        puzzle[p.x][p.y][p.z] = blocks[node_id];
+    }
+    puzzle.Visualize();
+}
 
 static void Solve() {
     // TODO
@@ -492,8 +758,25 @@ static void Solve() {
 
 int main() {
     Init();
-    Solve();
+    SolveGreedy();
+    // Solve();
 }
 
 // 集合被覆問題
 // * 集合全部使えるとは限らない
+
+// 焼きなましは制約を満たさないものも含める (スコアにペナルティを課す)
+// ただし、満たさない場合は
+// いやこれ難しい
+
+// SCP としての解に対応した解がある割合はどれくらいか？
+// それなりにあるなら SCP を頑張る
+// 全然無いなら？
+
+// でもどの道 SCP を頑張る必要があるのでは？
+// SCP として焼きなまして、BFS して解が得られなかった場合には
+// コアを増やすが焼きなましにはフィードバックしない
+
+// よく考えると BFS しても最適ではなくて後からめり込んだ方が良い
+// ただ連結判定が面倒
+// いや無理だわこれ
