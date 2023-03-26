@@ -207,8 +207,14 @@ struct alignas(64) Silhouette {
             AsM256i()[0], _mm256_setzero_si256()); // 8bit x 32
         const __m256i x1 =
             _mm256_cmpeq_epi8(AsM256i()[1], _mm256_setzero_si256());
-        const auto nonzero_bytes = ~((ull)_mm256_movemask_epi8(x0) |
+        const auto nonzero_bytes = ~((ull)(unsigned)_mm256_movemask_epi8(x0) |
                                      (ull)_mm256_movemask_epi8(x1) << 32);
+        if (nonzero_bytes == 0) {
+            cout << "_mm256_movemask_epi8(x1)=" << _mm256_movemask_epi8(x1)
+                 << endl;
+            cout << "(ull)_mm256_movemask_epi8(x1)="
+                 << (ull)_mm256_movemask_epi8(x1) << endl;
+        }
         assert(nonzero_bytes != 0);
         const auto nonzero_byte = ::CountRightZero(nonzero_bytes);
         return nonzero_byte * 8 + ::CountRightZero(AsU8()[nonzero_byte]);
@@ -654,8 +660,8 @@ struct State {
                 qs[core_id].push_back({edge_id});
                 visited_silhouette |= edge.silhouette;
                 for (const auto node_id : edge.node_ids) {
-                    assert(visited_nodes[node_id] == -1);
-                    visited_nodes[node_id] = core_id;
+                    // assert(visited_nodes[node_id] == -1);
+                    // visited_nodes[node_id] = core_id;
                 }
             }
             auto next_core_id = vector<short>(cores.size());
@@ -671,7 +677,7 @@ struct State {
                     edge_id = q.front().edge_id;
                     q.pop_front();
                     const auto& edge = info::edges[edge_id];
-                    if (visited_nodes[edge.node_ids[0]] == -1 ||
+                    if (visited_nodes[edge.node_ids[0]] == -1 &&
                         visited_nodes[edge.node_ids[1]] == -1)
                         goto ok;
                 }
@@ -704,6 +710,8 @@ struct State {
             // BFS が終わり、全部のシルエット条件を満たしたか確認
             auto non_visited_silhouette = visited_silhouette;
             non_visited_silhouette ^= info::full_silhouette;
+            ///////
+            // return visited_nodes;
             if (non_visited_silhouette.empty()) {
                 return visited_nodes;
             }
@@ -731,23 +739,24 @@ struct State {
     }
 };
 
-// TODO: デバッグ
 static void SolveGreedy() {
     auto state = State();
     auto blocks = state.Greedy();
-    auto puzzle = Cube<int>();
+    auto puzzle = array<Cube<int>, 2>();
+    auto n_blocks = 0;
     for (auto node_id = 0; node_id < (int)info::nodes.size(); node_id++) {
         const auto& p = info::nodes[node_id].coord;
-        puzzle[p.x][p.y][p.z] = blocks[node_id];
+        puzzle[p.w][p.x][p.y][p.z] = blocks[node_id] + 1;
+        n_blocks = max(n_blocks, blocks[node_id] + 1);
     }
-    puzzle.Visualize();
+
+    cout << n_blocks << endl;
+    puzzle[0].Visualize();
+    puzzle[1].Visualize();
 }
 
 static void Solve() {
     // TODO
-
-    // TODO:
-    // そのcore集合で全部のシルエットを埋められるかを、bitboardで先に確認する
 
     // 遷移
     // core をランダム?に変更
@@ -761,22 +770,3 @@ int main() {
     SolveGreedy();
     // Solve();
 }
-
-// 集合被覆問題
-// * 集合全部使えるとは限らない
-
-// 焼きなましは制約を満たさないものも含める (スコアにペナルティを課す)
-// ただし、満たさない場合は
-// いやこれ難しい
-
-// SCP としての解に対応した解がある割合はどれくらいか？
-// それなりにあるなら SCP を頑張る
-// 全然無いなら？
-
-// でもどの道 SCP を頑張る必要があるのでは？
-// SCP として焼きなまして、BFS して解が得られなかった場合には
-// コアを増やすが焼きなましにはフィードバックしない
-
-// よく考えると BFS しても最適ではなくて後からめり込んだ方が良い
-// ただ連結判定が面倒
-// いや無理だわこれ
