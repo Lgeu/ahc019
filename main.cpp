@@ -4,6 +4,7 @@
 #include <iostream>
 #include <numeric>
 #include <random>
+#include <tuple>
 #include <vector>
 #include <x86intrin.h>
 
@@ -580,8 +581,7 @@ static void Init() {
 struct State {
     struct Core {
         int edge_id;
-        array<bool, 6>
-            dierction_priority; // bfsじゃなくてもっと賢くすればこれ要らんか？
+        array<bool, 6> dierction_priority;
     };
     Stack<Core, 200> cores;
 
@@ -594,11 +594,75 @@ struct State {
         return silhouette;
     }
 
+    auto BFS() const {
+        auto visited_silhouette = info::Silhouette();
+        static auto visited_nodes = array<short, 14 * 14 * 14 * 2>();
+        fill(visited_nodes.begin(), visited_nodes.begin() + info::nodes.size(),
+             -1);
+        struct QueueElement {
+            int edge_id;
+        };
+        static auto qs = vector<Queue<QueueElement, 14 * 14 * 14 * 2>>();
+        if (qs.size() < cores.size())
+            qs.resize(cores.size());
+        for (auto core_id = 0; core_id < (int)cores.size(); core_id++) {
+            const auto edge_id = cores[core_id].edge_id;
+            const auto& edge = info::edges[edge_id];
+            qs[core_id].clear();
+            qs[core_id].push_back({edge_id});
+            visited_silhouette |= edge.silhouette;
+        }
+        auto next_core_id = vector<short>(cores.size());
+        iota(next_core_id.begin(), next_core_id.end() - 1, 1);
+        next_core_id.back() = 0;
+        auto last_core_id = (short)-1;
+        for (auto core_id = 0;; core_id = next_core_id[core_id]) {
+            const auto& core = cores[core_id];
+            auto& q = qs[core_id];
+            assert(!q.empty());
+            int edge_id;
+            while (!q.empty()) {
+                edge_id = q.front().edge_id;
+                q.pop_front();
+                const auto& edge = info::edges[edge_id];
+                if (visited_nodes[edge.node_ids[0]] == -1 &&
+                    visited_nodes[edge.node_ids[1]] == -1)
+                    goto ok;
+            }
+            next_core_id[last_core_id] = next_core_id[core_id];
+            if (next_core_id[core_id] == core_id)
+                break;
+            continue;
+        ok:;
+            {
+                const auto& edge = info::edges[edge_id];
+                visited_nodes[edge.node_ids[0]] = core_id;
+                visited_nodes[edge.node_ids[1]] = core_id;
+                visited_silhouette |= edge.silhouette;
+                for (const auto& neighbour : edge.neighbours) {
+                    if (core.dierction_priority[neighbour.direction]) {
+                        q.push_back({neighbour.edge_id});
+                    } else {
+                        q.push_front({neighbour.edge_id});
+                    }
+                }
+                if (q.empty()) { // ほとんど起こらないはず
+                    next_core_id[last_core_id] = next_core_id[core_id];
+                    if (next_core_id[core_id] == core_id)
+                        break;
+                    continue;
+                }
+                last_core_id = core_id;
+            }
+        }
+        return make_tuple(visited_silhouette, visited_nodes);
+    }
+
     void Update() {
         // TODO
     }
 
-    std::array<short, 5488>& Greedy() {
+    const array<short, 5488>& Greedy() {
         auto scp_not_covered = info::full_silhouette;
         scp_not_covered ^= SCPCovered();
 
@@ -625,117 +689,49 @@ struct State {
                 const auto r = uniform_int_distribution<>(
                     0, best_edge_group.size() - 1)(rng);
                 const auto edge_id = best_edge_group.edge_ids[r];
-                const auto& edge = info::edges[edge_id];
-                for (const auto& core : cores)
-                    for (const auto core_node_id :
-                         info::edges[core.edge_id].node_ids)
-                        for (const auto new_node_id : edge.node_ids)
-                            if (core_node_id == new_node_id)
-                                goto fail;
-                cores.push_back({
-                    edge_id,
-                    {true, true, true, true, true, true},
-                });
-                break;
-            fail:;
+                if (CheckAddable(edge_id)) {
+                    cores.push_back({
+                        edge_id,
+                        {true, true, true, true, true, true},
+                    });
+                    break;
+                }
             }
         }
 
         // 01BFS で広げてく
         while (true) {
-            auto visited_silhouette = info::Silhouette();
-            static auto visited_nodes = array<short, 14 * 14 * 14 * 2>();
-            fill(visited_nodes.begin(),
-                 visited_nodes.begin() + info::nodes.size(), -1);
-            struct QueueElement {
-                int edge_id;
-            };
-            static auto qs = vector<Queue<QueueElement, 14 * 14 * 14 * 2>>();
-            if (qs.size() < cores.size())
-                qs.resize(cores.size());
-            for (auto core_id = 0; core_id < (int)cores.size(); core_id++) {
-                const auto edge_id = cores[core_id].edge_id;
-                const auto& edge = info::edges[edge_id];
-                qs[core_id].clear();
-                qs[core_id].push_back({edge_id});
-                visited_silhouette |= edge.silhouette;
-                for (const auto node_id : edge.node_ids) {
-                    // assert(visited_nodes[node_id] == -1);
-                    // visited_nodes[node_id] = core_id;
-                }
-            }
-            auto next_core_id = vector<short>(cores.size());
-            iota(next_core_id.begin(), next_core_id.end() - 1, 1);
-            next_core_id.back() = 0;
-            auto last_core_id = (short)-1;
-            for (auto core_id = 0;; core_id = next_core_id[core_id]) {
-                const auto& core = cores[core_id];
-                auto& q = qs[core_id];
-                assert(!q.empty());
-                int edge_id;
-                while (!q.empty()) {
-                    edge_id = q.front().edge_id;
-                    q.pop_front();
-                    const auto& edge = info::edges[edge_id];
-                    if (visited_nodes[edge.node_ids[0]] == -1 &&
-                        visited_nodes[edge.node_ids[1]] == -1)
-                        goto ok;
-                }
-                next_core_id[last_core_id] = next_core_id[core_id];
-                if (next_core_id[core_id] == core_id)
-                    break;
-                continue;
-            ok:;
-                {
-                    const auto& edge = info::edges[edge_id];
-                    visited_nodes[edge.node_ids[0]] = core_id;
-                    visited_nodes[edge.node_ids[1]] = core_id;
-                    visited_silhouette |= edge.silhouette;
-                    for (const auto& neighbour : edge.neighbours) {
-                        if (core.dierction_priority[neighbour.direction]) {
-                            q.push_back({neighbour.edge_id});
-                        } else {
-                            q.push_front({neighbour.edge_id});
-                        }
-                    }
-                    if (q.empty()) { // ほとんど起こらないはず
-                        next_core_id[last_core_id] = next_core_id[core_id];
-                        if (next_core_id[core_id] == core_id)
-                            break;
-                        continue;
-                    }
-                    last_core_id = core_id;
-                }
-            }
-            // BFS が終わり、全部のシルエット条件を満たしたか確認
+            // BFS
+            const auto& [visited_silhouette, visited_nodes] = BFS();
+            // 全部のシルエット条件を満たしたか確認
             auto non_visited_silhouette = visited_silhouette;
             non_visited_silhouette ^= info::full_silhouette;
-            ///////
-            // return visited_nodes;
-            if (non_visited_silhouette.empty()) {
+            if (non_visited_silhouette.empty())
                 return visited_nodes;
-            }
             // 満たしていない pixel のところに edge を追加
             const auto pixel_id = non_visited_silhouette.CountRightZero();
             const auto& pixel = info::pixels[pixel_id];
             for (const auto new_edge_id : pixel.edge_ids) {
-                for (const auto& core : cores)
-                    for (const auto core_node_id :
-                         info::edges[core.edge_id].node_ids)
-                        for (const auto new_node_id :
-                             info::edges[new_edge_id].node_ids)
-                            if (core_node_id == new_node_id)
-                                goto fail2;
-                cores.push_back({
-                    new_edge_id,
-                    {true, true, true, true, true, true},
-                });
-                goto ok2;
-            fail2:;
+                if (CheckAddable(new_edge_id)) {
+                    cores.push_back({
+                        new_edge_id,
+                        {true, true, true, true, true, true},
+                    });
+                    goto ok2;
+                }
             }
             assert(false);
         ok2:;
         }
+    }
+
+    bool CheckAddable(const int edge_id) const {
+        for (const auto& core : cores)
+            for (const auto core_node_id : info::edges[core.edge_id].node_ids)
+                for (const auto new_node_id : info::edges[edge_id].node_ids)
+                    if (core_node_id == new_node_id)
+                        return false;
+        return true;
     }
 };
 
@@ -770,3 +766,6 @@ int main() {
     SolveGreedy();
     // Solve();
 }
+
+// core はブロックの中央であった方が良い
+// core 同士の座標は離す必要がある
