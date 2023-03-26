@@ -88,8 +88,8 @@ struct Queue {
     size_t size() const { return right - left; }
     bool empty() const { return right == left; }
     void clear() {
-        left = 0;
-        right = 0;
+        left = initial_offset;
+        right = initial_offset;
     }
 };
 
@@ -650,7 +650,7 @@ struct State {
             struct QueueElement {
                 int edge_id;
             };
-            static auto qs = vector<Queue<QueueElement, 14 * 14 * 14 / 2>>();
+            static auto qs = vector<Queue<QueueElement, 14 * 14 * 14 * 2>>();
             if (qs.size() < cores.size())
                 qs.resize(cores.size());
             for (auto core_id = 0; core_id < (int)cores.size(); core_id++) {
