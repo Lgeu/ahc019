@@ -1,3 +1,4 @@
+#include <algorithm>
 #include <array>
 #include <cassert>
 #include <cstring>
@@ -555,20 +556,20 @@ static void Init() {
         }
     }
 
-    cerr << "edge_groups.size()=" << edge_groups.size() << endl;
-    cerr << "edge_groups[0].size()=" << edge_groups[0].size() << endl;
-    for (const auto edge_id : edge_groups[0].edge_ids) {
-        const auto& e = edges[edge_id];
-        for (auto i = 0; i < 2; i++) {
-            const auto node_id = e.node_ids[i];
-            const auto v = nodes[node_id].coord;
-            v.Print(cerr);
-            cerr << " ";
-        }
-        cerr << endl;
-    }
-    edge_groups[0].Visualize();
-    edge_groups[1].Visualize();
+    // cerr << "edge_groups.size()=" << edge_groups.size() << endl;
+    // cerr << "edge_groups[0].size()=" << edge_groups[0].size() << endl;
+    // for (const auto edge_id : edge_groups[0].edge_ids) {
+    //     const auto& e = edges[edge_id];
+    //     for (auto i = 0; i < 2; i++) {
+    //         const auto node_id = e.node_ids[i];
+    //         const auto v = nodes[node_id].coord;
+    //         v.Print(cerr);
+    //         cerr << " ";
+    //     }
+    //     cerr << endl;
+    // }
+    // edge_groups[0].Visualize();
+    // edge_groups[1].Visualize();
 }
 
 } // namespace info
@@ -725,6 +726,68 @@ struct State {
         }
     }
 
+    inline auto Random(const int max_n_cores) {
+        auto scp_not_covered = info::full_silhouette;
+        scp_not_covered ^= SCPCovered();
+
+        // SCP を解く
+        while (!scp_not_covered.empty()) {
+            if (max_n_cores <= (int)cores.size())
+                return make_tuple(false, array<short, 5488>());
+            const auto edge_id =
+                uniform_int_distribution<>(0, info::edges.size() - 1)(rng);
+            const auto& edge = info::edges[edge_id];
+            const auto edge_group_id = edge.edge_group_id;
+            const auto& edge_group = info::edge_groups[edge_group_id];
+            auto edge_group_silhouette = edge_group.silhouette;
+            edge_group_silhouette &= scp_not_covered;
+            if (edge_group_silhouette.empty())
+                continue;
+            if (!CheckAddable(edge_id))
+                continue;
+            cores.push_back({
+                edge_id,
+                {true, true, true, true, true, true},
+            });
+            scp_not_covered.AndNotAssign(edge_group.silhouette);
+        }
+        // 01BFS で広げてく
+        while (true) {
+            // BFS
+            const auto& [visited_silhouette, visited_nodes] = BFS();
+            // 全部のシルエット条件を満たしたか確認
+            auto non_visited_silhouette = visited_silhouette;
+            non_visited_silhouette ^= info::full_silhouette;
+            if (non_visited_silhouette.empty())
+                return make_tuple(true, visited_nodes);
+            // 失敗
+            if (max_n_cores <= (int)cores.size())
+                return make_tuple(false, array<short, 5488>());
+            // 満たしていない pixel のところに edge を追加
+            // この順番もランダムにした方が良いのか？
+            const auto pixel_id = non_visited_silhouette.CountRightZero();
+            const auto& pixel = info::pixels[pixel_id];
+            // 探索順を決める、ここもうちょっと高速化はできそう
+            static array<short, 1000> order;
+            iota(order.begin(), order.begin() + pixel.edge_ids.size(), 0);
+            shuffle(order.begin(), order.begin() + pixel.edge_ids.size(), rng);
+            for (auto idx_order = 0; idx_order < (int)pixel.edge_ids.size();
+                 idx_order++) {
+                const auto new_edge_id = pixel.edge_ids[order[idx_order]];
+                if (CheckAddable(new_edge_id)) {
+                    cores.push_back({
+                        new_edge_id,
+                        {true, true, true, true, true, true},
+                    });
+                    goto ok2;
+                }
+            }
+            return make_tuple(false, array<short, 5488>());
+            assert(false);
+        ok2:;
+        }
+    }
+
     bool CheckAddable(const int edge_id) const {
         for (const auto& core : cores)
             for (const auto core_node_id : info::edges[core.edge_id].node_ids)
@@ -735,9 +798,7 @@ struct State {
     }
 };
 
-static void SolveGreedy() {
-    auto state = State();
-    auto blocks = state.Greedy();
+static void Visualize(const array<short, 5488>& blocks) {
     auto puzzle = array<Cube<int>, 2>();
     auto n_blocks = 0;
     for (auto node_id = 0; node_id < (int)info::nodes.size(); node_id++) {
@@ -749,6 +810,35 @@ static void SolveGreedy() {
     cout << n_blocks << endl;
     puzzle[0].Visualize();
     puzzle[1].Visualize();
+}
+
+static void SolveGreedy() {
+    auto state = State();
+    auto blocks = state.Greedy();
+    Visualize(blocks);
+}
+
+static void SolveRandom() {
+    auto state = State();
+    auto [success, blocks] = state.Random(200);
+    assert(success);
+    Visualize(blocks);
+}
+
+static void SolveRandomLoop() {
+    array<short, 5488> best_blocks;
+    auto min_core_size = 200;
+    for (auto i = 0; i < 1e7; i++) {
+        auto state = State();
+        auto [success, blocks] = state.Random(min_core_size - 1);
+        if (!success)
+            continue;
+        if ((int)state.cores.size() < min_core_size) {
+            min_core_size = (int)state.cores.size();
+            best_blocks = blocks;
+        }
+    }
+    Visualize(best_blocks);
 }
 
 static void Solve() {
@@ -763,7 +853,9 @@ static void Solve() {
 
 int main() {
     Init();
-    SolveGreedy();
+    // SolveGreedy();
+    // SolveRandom();
+    SolveRandomLoop();
     // Solve();
 }
 
