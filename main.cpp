@@ -16,7 +16,32 @@ using u8 = unsigned char;
 using ll = long long;
 using ull = unsigned long long;
 
-auto rng = mt19937(42);
+// auto rng = mt19937(42);
+
+struct Random {
+    using result_type = unsigned;
+    ull state;
+    Random(unsigned seed) : state(seed) {
+        assert(seed != 0);
+        for (auto i = 0; i < 5; i++)
+            (*this)();
+    }
+    unsigned operator()() {
+        state ^= state << 7;
+        state ^= state >> 9;
+        return (unsigned)state;
+    }
+    int RandInt(int mini, int maxi) {
+        auto x = (ull)(*this)();
+        x *= maxi - mini + 1;
+        x >>= 32;
+        return mini + (int)x;
+    }
+    static constexpr unsigned max() { return 0xffffffffu; }
+    static constexpr unsigned min() { return 1u; }
+};
+
+auto rng = Random(42);
 
 static inline int CountRightZero(const ull x) {
 #ifdef _MSC_VER
@@ -579,6 +604,12 @@ static void Init() {
     info::Init();
 }
 
+struct Solution {
+    bool success;
+    double score;
+    array<short, 5488> blocks;
+};
+
 struct State {
     struct Core {
         int edge_id;
@@ -596,10 +627,22 @@ struct State {
     }
 
     auto BFS() const {
-        auto visited_silhouette = info::Silhouette();
-        static auto visited_nodes = array<short, 14 * 14 * 14 * 2>();
-        fill(visited_nodes.begin(), visited_nodes.begin() + info::nodes.size(),
-             -1);
+        // 最後まで行っても埋めきれないか、スコアが超過したかで終了
+        struct BFSResult {
+            enum struct Status {
+                kSuccess,
+                kFailureSilhouette,
+                kFailureScoreExcess,
+            };
+            info::Silhouette visited_silhouette;
+            array<short, 14 * 14 * 14 * 2> visited_nodes;
+            array<short, 200> block_sizes;
+            double score;
+            Status status;
+        };
+        auto res = BFSResult{};
+        fill(res.visited_nodes.begin(),
+             res.visited_nodes.begin() + info::nodes.size(), -1);
         struct QueueElement {
             int edge_id;
         };
@@ -611,7 +654,7 @@ struct State {
             const auto& edge = info::edges[edge_id];
             qs[core_id].clear();
             qs[core_id].push_back({edge_id});
-            visited_silhouette |= edge.silhouette;
+            res.visited_silhouette |= edge.silhouette;
         }
         auto next_core_id = vector<short>(cores.size());
         iota(next_core_id.begin(), next_core_id.end() - 1, 1);
@@ -626,8 +669,8 @@ struct State {
                 edge_id = q.front().edge_id;
                 q.pop_front();
                 const auto& edge = info::edges[edge_id];
-                if (visited_nodes[edge.node_ids[0]] == -1 &&
-                    visited_nodes[edge.node_ids[1]] == -1)
+                if (res.visited_nodes[edge.node_ids[0]] == -1 &&
+                    res.visited_nodes[edge.node_ids[1]] == -1)
                     goto ok;
             }
             next_core_id[last_core_id] = next_core_id[core_id];
@@ -636,10 +679,11 @@ struct State {
             continue;
         ok:;
             {
+                res.block_sizes[core_id]++;
                 const auto& edge = info::edges[edge_id];
-                visited_nodes[edge.node_ids[0]] = core_id;
-                visited_nodes[edge.node_ids[1]] = core_id;
-                visited_silhouette |= edge.silhouette;
+                res.visited_nodes[edge.node_ids[0]] = core_id;
+                res.visited_nodes[edge.node_ids[1]] = core_id;
+                res.visited_silhouette |= edge.silhouette;
                 for (const auto& neighbour : edge.neighbours) {
                     if (core.dierction_priority[neighbour.direction]) {
                         q.push_back({neighbour.edge_id});
@@ -656,14 +700,16 @@ struct State {
                 last_core_id = core_id;
             }
         }
-        return make_tuple(visited_silhouette, visited_nodes);
+        for (auto i = 0; i < (int)cores.size(); i++)
+            res.score += 1.0 / (double)res.block_sizes[i];
+        return res;
     }
 
     void Update() {
         // TODO
     }
 
-    const array<short, 5488>& Greedy() {
+    Solution Greedy() {
         auto scp_not_covered = info::full_silhouette;
         scp_not_covered ^= SCPCovered();
 
@@ -703,12 +749,12 @@ struct State {
         // 01BFS で広げてく
         while (true) {
             // BFS
-            const auto& [visited_silhouette, visited_nodes] = BFS();
+            const auto bfs_result = BFS();
             // 全部のシルエット条件を満たしたか確認
-            auto non_visited_silhouette = visited_silhouette;
+            auto non_visited_silhouette = bfs_result.visited_silhouette;
             non_visited_silhouette ^= info::full_silhouette;
             if (non_visited_silhouette.empty())
-                return visited_nodes;
+                return {true, bfs_result.score, bfs_result.visited_nodes};
             // 満たしていない pixel のところに edge を追加
             const auto pixel_id = non_visited_silhouette.CountRightZero();
             const auto& pixel = info::pixels[pixel_id];
@@ -726,16 +772,15 @@ struct State {
         }
     }
 
-    inline auto Random(const int max_n_cores) {
+    inline Solution Random(const int max_n_cores) {
         auto scp_not_covered = info::full_silhouette;
         scp_not_covered ^= SCPCovered();
 
         // SCP を解く
         while (!scp_not_covered.empty()) {
             if (max_n_cores <= (int)cores.size())
-                return make_tuple(false, array<short, 5488>());
-            const auto edge_id =
-                uniform_int_distribution<>(0, info::edges.size() - 1)(rng);
+                return {false, 1e9, {}};
+            const auto edge_id = rng.RandInt(0, info::edges.size() - 1);
             const auto& edge = info::edges[edge_id];
             const auto edge_group_id = edge.edge_group_id;
             const auto& edge_group = info::edge_groups[edge_group_id];
@@ -754,26 +799,26 @@ struct State {
         // 01BFS で広げてく
         while (true) {
             // BFS
-            const auto& [visited_silhouette, visited_nodes] = BFS();
+            const auto bfs_result = BFS();
             // 全部のシルエット条件を満たしたか確認
-            auto non_visited_silhouette = visited_silhouette;
+            auto non_visited_silhouette = bfs_result.visited_silhouette;
             non_visited_silhouette ^= info::full_silhouette;
             if (non_visited_silhouette.empty())
-                return make_tuple(true, visited_nodes);
+                return {true, bfs_result.score, bfs_result.visited_nodes};
             // 失敗
             if (max_n_cores <= (int)cores.size())
-                return make_tuple(false, array<short, 5488>());
+                return {false, 1e9, {}};
             // 満たしていない pixel のところに edge を追加
             // この順番もランダムにした方が良いのか？
             const auto pixel_id = non_visited_silhouette.CountRightZero();
             const auto& pixel = info::pixels[pixel_id];
             // 探索順を決める、ここもうちょっと高速化はできそう
-            static array<short, 1000> order;
+            static array<short, 20000> order;
             iota(order.begin(), order.begin() + pixel.edge_ids.size(), 0);
-            shuffle(order.begin(), order.begin() + pixel.edge_ids.size(), rng);
-            for (auto idx_order = 0; idx_order < (int)pixel.edge_ids.size();
-                 idx_order++) {
+            for (auto i = (int)pixel.edge_ids.size() - 1; i >= 0; i--) {
+                const auto idx_order = rng.RandInt(0, i);
                 const auto new_edge_id = pixel.edge_ids[order[idx_order]];
+                order[idx_order] = order[i];
                 if (CheckAddable(new_edge_id)) {
                     cores.push_back({
                         new_edge_id,
@@ -782,7 +827,7 @@ struct State {
                     goto ok2;
                 }
             }
-            return make_tuple(false, array<short, 5488>());
+            return {false, 1e9, {}};
             assert(false);
         ok2:;
         }
@@ -812,36 +857,42 @@ static void Visualize(const array<short, 5488>& blocks) {
     puzzle[1].Visualize();
 }
 
-static void SolveGreedy() {
+[[maybe_unused]] static void SolveGreedy() {
     auto state = State();
-    auto blocks = state.Greedy();
+    auto blocks = state.Greedy().blocks;
     Visualize(blocks);
 }
 
-static void SolveRandom() {
+[[maybe_unused]] static void SolveRandom() {
     auto state = State();
-    auto [success, blocks] = state.Random(200);
+    auto [success, _, blocks] = state.Random(200);
     assert(success);
     Visualize(blocks);
 }
 
 static void SolveRandomLoop() {
     array<short, 5488> best_blocks;
-    auto min_core_size = 200;
-    for (auto i = 0; i < 1e7; i++) {
+    auto min_score = 1e9;
+    auto min_n_cores = 200;
+    for (auto i = 0; i < 1e4; i++) {
         auto state = State();
-        auto [success, blocks] = state.Random(min_core_size - 1);
+        auto [success, score, blocks] = state.Random(min_n_cores);
         if (!success)
             continue;
-        if ((int)state.cores.size() < min_core_size) {
-            min_core_size = (int)state.cores.size();
+        if ((int)state.cores.size() < min_n_cores) {
+            min_n_cores = (int)state.cores.size();
+        }
+        if (score < min_score) {
+            min_score = score;
             best_blocks = blocks;
         }
     }
+    cerr << "min_score=" << min_score << endl;
+    cerr << "min_n_cores=" << min_n_cores << endl;
     Visualize(best_blocks);
 }
 
-static void Solve() {
+[[maybe_unused]] static void Solve() {
     // TODO
 
     // 遷移
