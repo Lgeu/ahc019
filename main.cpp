@@ -298,8 +298,9 @@ struct EdgeGroup {
 };
 
 static vector<EdgeGroup> edge_groups;
-static array<array<Stack<int, 50>, 14 * 14 * 14 / 2>, 2>
-    candidate_edge_ids_for_each_node; // TODO: 50
+static constexpr auto n_candidate_edges_for_node = 50; // パラメータ
+static array<array<Stack<int, n_candidate_edges_for_node>, 14 * 14 * 14 / 2>, 2>
+    candidate_edge_ids_for_each_node;
 
 static void Init() {
     for (auto&& a : candidate_edge_ids_for_each_node)
@@ -399,9 +400,9 @@ static void Init() {
 
         auto para = Vec3{};
         auto visited = Cube<bool>();
-        for (para.x = 0; para.x < D; para.x++) {
-            for (para.y = 0; para.y < D; para.y++) {
-                for (para.z = 0; para.z < D; para.z++) {
+        for (para.x = -D + 1; para.x < D; para.x++) {
+            for (para.y = -D + 1; para.y < D; para.y++) {
+                for (para.z = -D + 1; para.z < D; para.z++) {
                     auto siz =
                         Vec3(D - abs(para.x), D - abs(para.y), D - abs(para.z));
                     for (b.x = 0; b.x < siz.x; b.x++) {
@@ -509,7 +510,6 @@ static void Init() {
          });
 
     // 各頂点に対して、それを含むgroupの中で、サイズが大きい上位何個かを取り出す
-    const auto n_candidate_edges_for_node = 50;
     auto n_candidate_groups = array<array<int, 14 * 14 * 14 / 2>, 2>();
     auto all_candidate_tmp_groups = vector<int>();
 
@@ -586,8 +586,8 @@ static void Init() {
         }
     }
 
-    // cerr << "edge_groups.size()=" << edge_groups.size() << endl;
-    // cerr << "edge_groups[0].size()=" << edge_groups[0].size() << endl;
+    cerr << "edge_groups.size()=" << edge_groups.size() << endl;
+    cerr << "edge_groups[0].size()=" << edge_groups[0].size() << endl;
     // for (const auto edge_id : edge_groups[0].edge_ids) {
     //     const auto& e = edges[edge_id];
     //     for (auto i = 0; i < 2; i++) {
@@ -918,7 +918,7 @@ static void Visualize(const array<short, 5488>& blocks) {
         Solution solution;
     };
 
-    const auto population_size = 10;
+    const auto population_size = 1;
     auto population = vector<Element>(population_size);
     for (auto&& [state, solution] : population) {
         while (!solution.success) {
@@ -926,7 +926,7 @@ static void Visualize(const array<short, 5488>& blocks) {
             solution = state.Random(200);
         }
     }
-    for (auto i = 0; i < 2e6; i++) {
+    for (auto i = 0; i < 5e6 * 4; i++) {
         const auto r = rng.RandInt(0, population_size - 1);
         auto state = population[r].state;
         for (auto i = (int)state.cores.size() - 1; i >= 0; i--) {
@@ -977,4 +977,4 @@ int main() {
 // core はブロックの中央であった方が良い
 // core 同士の座標は離す必要がある
 
-// TODO: 2 つをマージ
+// TODO: 大きいのは探索範囲を絞った方が良い
