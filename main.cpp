@@ -16,6 +16,13 @@ using u8 = unsigned char;
 using ll = long long;
 using ull = unsigned long long;
 
+static inline double Time() {
+    return (double)(chrono::duration_cast<chrono::nanoseconds>(
+                        chrono::steady_clock::now().time_since_epoch())
+                        .count()) *
+           1e-9;
+}
+
 // auto rng = mt19937(42);
 
 struct Random {
@@ -500,8 +507,8 @@ static void Init() {
                 }
             }
         }
-        cerr << "tmp_edge_groups.size()=" << tmp_edge_groups.size() << endl;
-        cerr << "tmp_edges.size()=" << tmp_edges.size() << endl;
+        // cerr << "tmp_edge_groups.size()=" << tmp_edge_groups.size() << endl;
+        // cerr << "tmp_edges.size()=" << tmp_edges.size() << endl;
     }
 
     sort(tmp_edge_groups.begin(), tmp_edge_groups.end(),
@@ -586,8 +593,8 @@ static void Init() {
         }
     }
 
-    cerr << "edge_groups.size()=" << edge_groups.size() << endl;
-    cerr << "edge_groups[0].size()=" << edge_groups[0].size() << endl;
+    // cerr << "edge_groups.size()=" << edge_groups.size() << endl;
+    // cerr << "edge_groups[0].size()=" << edge_groups[0].size() << endl;
     // for (const auto edge_id : edge_groups[0].edge_ids) {
     //     const auto& e = edges[edge_id];
     //     for (auto i = 0; i < 2; i++) {
@@ -708,10 +715,6 @@ struct State {
         for (auto i = 0; i < (int)cores.size(); i++)
             res.score += 1.0 / (double)res.block_sizes[i];
         return res;
-    }
-
-    void Update() {
-        // TODO
     }
 
     Solution Greedy() {
@@ -903,6 +906,7 @@ static void Visualize(const array<short, 5488>& blocks) {
     cerr << "min_n_cores=" << min_n_cores << endl;
     Visualize(best_blocks);
 }
+auto t0 = Time();
 
 [[maybe_unused]] static void Solve() {
     // TODO
@@ -926,11 +930,14 @@ static void Visualize(const array<short, 5488>& blocks) {
             solution = state.Random(200);
         }
     }
-    for (auto i = 0; i < 5e6 * 4; i++) {
+    for (auto i = 0; i < 1e9; i++) {
+        if (i % 16 == 0 && Time() - t0 >= 5.5)
+            break;
+
         const auto r = rng.RandInt(0, population_size - 1);
         auto state = population[r].state;
         for (auto i = (int)state.cores.size() - 1; i >= 0; i--) {
-            if (rng.RandInt(0, 99) < 50) {
+            if (rng.RandInt(0, 99) < 50) { // パラメータ
                 state.cores[i] = state.cores[state.cores.size() - 1];
                 state.cores.pop_back();
             }
@@ -942,9 +949,9 @@ static void Visualize(const array<short, 5488>& blocks) {
         if (solution.score < population[r].solution.score) {
             population[r].state = state;
             population[r].solution = solution;
-            cerr << "Improved!  i=" << i;
-            cerr << "  score=" << solution.score;
-            cerr << "  cores.size()=" << state.cores.size() << endl;
+            // cerr << "Improved!  i=" << i;
+            // cerr << "  score=" << solution.score;
+            // cerr << "  cores.size()=" << state.cores.size() << endl;
         }
     }
 
@@ -961,8 +968,8 @@ static void Visualize(const array<short, 5488>& blocks) {
         }
     }
 
-    cerr << "min_score=" << min_score << endl;
-    cerr << "min_n_cores=" << min_n_cores << endl;
+    // cerr << "min_score=" << min_score << endl;
+    // cerr << "min_n_cores=" << min_n_cores << endl;
     Visualize(population[argmin_score].solution.blocks);
 }
 
