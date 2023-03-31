@@ -80,9 +80,14 @@ template <typename T, int max_size> struct Stack {
         assert(siz < max_size);
         arr[siz++] = value;
     }
+    void pop_back() {
+        assert(siz > 0);
+        siz--;
+    }
     size_t size() const { return siz; }
     void clear() { siz = 0; }
     const T& operator[](const int idx) const { return arr[idx]; }
+    T& operator[](const int idx) { return arr[idx]; }
     const T* begin() const { return &*arr.begin(); }
     const T* end() const { return begin() + siz; }
 };
@@ -762,6 +767,7 @@ struct State {
                 if (CheckAddable(new_edge_id)) {
                     cores.push_back({
                         new_edge_id,
+                        //{false, false, false, false, false, false},
                         {true, true, true, true, true, true},
                     });
                     goto ok2;
@@ -777,8 +783,11 @@ struct State {
         scp_not_covered ^= SCPCovered();
 
         // SCP を解く
+        auto trial = 0;
         while (!scp_not_covered.empty()) {
             if (max_n_cores <= (int)cores.size())
+                return {false, 1e9, {}};
+            if (trial++ >= 50)
                 return {false, 1e9, {}};
             const auto edge_id = rng.RandInt(0, info::edges.size() - 1);
             const auto& edge = info::edges[edge_id];
@@ -792,8 +801,10 @@ struct State {
                 continue;
             cores.push_back({
                 edge_id,
+                // {false, false, false, false, false, false},
                 {true, true, true, true, true, true},
             });
+            trial = 0;
             scp_not_covered.AndNotAssign(edge_group.silhouette);
         }
         // 01BFS で広げてく
@@ -822,6 +833,7 @@ struct State {
                 if (CheckAddable(new_edge_id)) {
                     cores.push_back({
                         new_edge_id,
+                        // {false, false, false, false, false, false},
                         {true, true, true, true, true, true},
                     });
                     goto ok2;
@@ -870,7 +882,7 @@ static void Visualize(const array<short, 5488>& blocks) {
     Visualize(blocks);
 }
 
-static void SolveRandomLoop() {
+[[maybe_unused]] static void SolveRandomLoop() {
     array<short, 5488> best_blocks;
     auto min_score = 1e9;
     auto min_n_cores = 200;
@@ -894,21 +906,75 @@ static void SolveRandomLoop() {
 
 [[maybe_unused]] static void Solve() {
     // TODO
+    // プールを用意する
+    // * 完全ランダムに作成してスコア低いやつと置き換え
+    // * どれか 1 つを、半分くらい core (特に小さいブロック？) を
+    //   消してその後ランダムに継ぎ足し、スコア改善で置き換え
+    // * どれか 1 つの state の 1/3 くらいの core に
+    //   他の state 内の core を継ぎ足し
 
-    // 遷移
-    // core をランダム?に変更
-    // 埋めきれなかった場合、core を埋めきれなかった場所に追加
-    // 埋めきれた場合、小さいブロックの core を取り除く
-    // 古いやつとマージ
+    struct Element {
+        State state;
+        Solution solution;
+    };
+
+    const auto population_size = 10;
+    auto population = vector<Element>(population_size);
+    for (auto&& [state, solution] : population) {
+        while (!solution.success) {
+            state.cores.clear();
+            solution = state.Random(200);
+        }
+    }
+    for (auto i = 0; i < 2e6; i++) {
+        const auto r = rng.RandInt(0, population_size - 1);
+        auto state = population[r].state;
+        for (auto i = (int)state.cores.size() - 1; i >= 0; i--) {
+            if (rng.RandInt(0, 99) < 50) {
+                state.cores[i] = state.cores[state.cores.size() - 1];
+                state.cores.pop_back();
+            }
+        }
+
+        auto solution = state.Random(population[r].state.cores.size());
+        if (!solution.success)
+            continue;
+        if (solution.score < population[r].solution.score) {
+            population[r].state = state;
+            population[r].solution = solution;
+            cerr << "Improved!  i=" << i;
+            cerr << "  score=" << solution.score;
+            cerr << "  cores.size()=" << state.cores.size() << endl;
+        }
+    }
+
+    auto min_score = 1e9;
+    auto min_n_cores = 99999;
+    auto argmin_score = -100;
+    for (auto i = 0; i < population_size; i++) {
+        if (min_score > population[i].solution.score) {
+            min_score = population[i].solution.score;
+            argmin_score = i;
+        }
+        if (min_n_cores > (int)population[i].state.cores.size()) {
+            min_n_cores = (int)population[i].state.cores.size();
+        }
+    }
+
+    cerr << "min_score=" << min_score << endl;
+    cerr << "min_n_cores=" << min_n_cores << endl;
+    Visualize(population[argmin_score].solution.blocks);
 }
 
 int main() {
     Init();
     // SolveGreedy();
     // SolveRandom();
-    SolveRandomLoop();
-    // Solve();
+    // SolveRandomLoop();
+    Solve();
 }
 
 // core はブロックの中央であった方が良い
 // core 同士の座標は離す必要がある
+
+// TODO: 2 つをマージ
