@@ -485,7 +485,7 @@ static void Init() {
                                         v.z--;
                                     }
                                 }
-                                if (right < 5)
+                                if (right < 5) // パラメータ
                                     continue;
                                 tmp_edge_groups.emplace_back(
                                     tmp_edges.size(), tmp_edges.size() + right);
@@ -593,7 +593,7 @@ static void Init() {
         }
     }
 
-    // cerr << "edge_groups.size()=" << edge_groups.size() << endl;
+    cerr << "edge_groups.size()=" << edge_groups.size() << endl;
     // cerr << "edge_groups[0].size()=" << edge_groups[0].size() << endl;
     // for (const auto edge_id : edge_groups[0].edge_ids) {
     //     const auto& e = edges[edge_id];
@@ -922,7 +922,7 @@ auto t0 = Time();
         Solution solution;
     };
 
-    const auto population_size = 1;
+    const auto population_size = 1; // パラメータ
     auto population = vector<Element>(population_size);
     for (auto&& [state, solution] : population) {
         while (!solution.success) {
@@ -936,11 +936,21 @@ auto t0 = Time();
 
         const auto r = rng.RandInt(0, population_size - 1);
         auto state = population[r].state;
+        auto n_removed_cores = 0;
         for (auto i = (int)state.cores.size() - 1; i >= 0; i--) {
-            if (rng.RandInt(0, 99) < 50) { // パラメータ
+            // パラメータ 穴だらけの時は小さい方がいい
+            // というかcoreの数によるか
+            if (rng.RandInt(0, 99) < 20) {
                 state.cores[i] = state.cores[state.cores.size() - 1];
                 state.cores.pop_back();
+                n_removed_cores++;
             }
+        }
+        if (n_removed_cores == 0) {
+            state.cores[rng.RandInt(0, (int)state.cores.size() - 1)] =
+                state.cores[state.cores.size() - 1];
+            state.cores.pop_back();
+            n_removed_cores++;
         }
 
         auto solution = state.Random(population[r].state.cores.size());
@@ -968,7 +978,7 @@ auto t0 = Time();
         }
     }
 
-    // cerr << "min_score=" << min_score << endl;
+    cerr << "min_score=" << min_score << endl;
     // cerr << "min_n_cores=" << min_n_cores << endl;
     Visualize(population[argmin_score].solution.blocks);
 }
@@ -985,3 +995,7 @@ int main() {
 // core 同士の座標は離す必要がある
 
 // TODO: 大きいのは探索範囲を絞った方が良い
+// TODO1: 変化させる数固定する
+// TODO: 小さいやつを消す
+// TODO2: 焼きなます
+// TODO3: GA
