@@ -44,6 +44,10 @@ struct Random {
         x >>= 32;
         return mini + (int)x;
     }
+    double Rand() {
+        const auto x = (*this)();
+        return (double)x * (1.0 / (double)(1ull << 32));
+    }
     static constexpr unsigned max() { return 0xffffffffu; }
     static constexpr unsigned min() { return 1u; }
 };
@@ -911,6 +915,12 @@ static void Visualize(const array<short, 5488>& blocks) {
 }
 auto t0 = Time();
 
+static double ComputeTemperature(const double progress) {
+    static constexpr auto kStartTemperature = 0.5;
+    static constexpr auto kEndTemperature = 0.01;
+    return (1.0 - progress) * kStartTemperature + progress * kEndTemperature;
+}
+
 [[maybe_unused]] static void Solve() {
     // TODO
     // プールを用意する
@@ -925,6 +935,8 @@ auto t0 = Time();
         Solution solution;
     };
 
+    static constexpr auto kTimeLimit = 5.5;
+
     const auto population_size = 1; // パラメータ
     auto population = vector<Element>(population_size);
     for (auto&& [state, solution] : population) {
@@ -933,8 +945,10 @@ auto t0 = Time();
             solution = state.Random(200);
         }
     }
+    auto best_solution = population[0].solution;
+    auto t = Time() - t0;
     for (auto trial = 0; trial < 1e9; trial++) {
-        if (trial % 16 == 0 && Time() - t0 >= 5.5)
+        if (trial % 16 == 0 && (t = Time() - t0) >= kTimeLimit)
             break;
 
         const auto r = rng.RandInt(0, population_size - 1);
@@ -965,31 +979,33 @@ auto t0 = Time();
         auto solution = state.Random(population[r].state.cores.size());
         if (!solution.success)
             continue;
-        if (solution.score < population[r].solution.score) {
+        const auto gain =
+            log2(population[r].solution.score) - log2(solution.score);
+        const auto progress = t / kTimeLimit;
+        const auto temperature = ComputeTemperature(progress);
+        const auto acceptance_proba = exp(gain / temperature);
+        if (rng.Rand() < acceptance_proba) {
             population[r].state = state;
             population[r].solution = solution;
+        }
+        if (solution.score < best_solution.score) {
+            best_solution = solution;
             // cerr << "Improved!  i=" << i;
             // cerr << "  score=" << solution.score;
             // cerr << "  cores.size()=" << state.cores.size() << endl;
         }
     }
 
-    auto min_score = 1e9;
     auto min_n_cores = 99999;
-    auto argmin_score = -100;
     for (auto i = 0; i < population_size; i++) {
-        if (min_score > population[i].solution.score) {
-            min_score = population[i].solution.score;
-            argmin_score = i;
-        }
         if (min_n_cores > (int)population[i].state.cores.size()) {
             min_n_cores = (int)population[i].state.cores.size();
         }
     }
 
-    cerr << "min_score=" << min_score << endl;
+    cerr << "min_score=" << best_solution.score << endl;
     // cerr << "min_n_cores=" << min_n_cores << endl;
-    Visualize(population[argmin_score].solution.blocks);
+    Visualize(best_solution.blocks);
 }
 
 int main() {
@@ -1004,6 +1020,6 @@ int main() {
 // core 同士の座標は離す必要がある
 
 // TODO: 大きいのは探索範囲を絞った方が良い
-// TODO1: 焼きなます
-// TODO2: GA
-// TODO: 3個以上削除するときは2個埋める
+// TODO: GA
+// TODO1: 3個以上削除するときは2個埋める
+// TODO2: チューニング
