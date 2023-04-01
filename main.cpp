@@ -933,8 +933,8 @@ auto t0 = Time();
             solution = state.Random(200);
         }
     }
-    for (auto trail = 0; trail < 1e9; trail++) {
-        if (trail % 16 == 0 && Time() - t0 >= 5.5)
+    for (auto trial = 0; trial < 1e9; trial++) {
+        if (trial % 16 == 0 && Time() - t0 >= 5.5)
             break;
 
         const auto r = rng.RandInt(0, population_size - 1);
