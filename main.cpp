@@ -937,16 +937,10 @@ auto t0 = Time();
         const auto r = rng.RandInt(0, population_size - 1);
         auto state = population[r].state;
         auto n_removed_cores = 0;
-        for (auto i = (int)state.cores.size() - 1; i >= 0; i--) {
-            // パラメータ 穴だらけの時は小さい方がいい
-            // というかcoreの数によるか
-            if (rng.RandInt(0, 99) < 20) {
-                state.cores[i] = state.cores[state.cores.size() - 1];
-                state.cores.pop_back();
-                n_removed_cores++;
-            }
-        }
-        if (n_removed_cores == 0) {
+        const auto n_remove = rng.RandInt(2, 3); // パラメータ
+        for (auto i = 0; i < n_remove; i++) {
+            if (state.cores.size() == 0)
+                break;
             state.cores[rng.RandInt(0, (int)state.cores.size() - 1)] =
                 state.cores[state.cores.size() - 1];
             state.cores.pop_back();
@@ -995,7 +989,6 @@ int main() {
 // core 同士の座標は離す必要がある
 
 // TODO: 大きいのは探索範囲を絞った方が良い
-// TODO1: 変化させる数固定する
-// TODO: 小さいやつを消す
+// TODO1: 小さいやつを消す
 // TODO2: 焼きなます
 // TODO3: GA
