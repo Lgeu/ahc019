@@ -23,18 +23,19 @@
 #elif defined(__GNUC__)
 #pragma GCC target(                                                            \
     "sse,sse2,sse3,ssse3,sse4,popcnt,abm,mmx,avx,avx2,tune=native")
-#pragma GCC optimize("Ofast")
+#pragma GCC optimize("O3")
 #endif
 
-static const auto n_candidate_edges_for_node = 100;
-static const auto n_new_core_candidates = 2;
-static const auto remove_2_ratio = 0.5;
-static const auto distance_exponent = 3.0;
-static const auto n_small_core_candidates = 2;
-static const auto start_temperature = 0.5;
-static const auto end_temperature = 0.5;
-static const auto annealing_param_a = 0.0;
-static const auto annealing_param_b = 1.0;
+static const auto n_candidate_edges_for_node = 100; // OPTIMIZE LOG [20, 200]
+static const auto n_new_core_candidates = 2;        // OPTIMIZE [1, 4]
+static const auto remove_2_ratio = 0.5;             // OPTIMIZE [0.0, 1.0]
+static const auto distance_exponent = 3.0;          // OPTIMIZE LOG [0.5, 8.0]
+static const auto n_small_core_candidates = 2;      // OPTIMIZE [1, 4]
+static const auto start_temperature = 0.5;          // OPTIMIZE LOG [5.0, 0.2]
+static const auto end_temperature = 0.5;            // OPTIMIZE LOG [5.0, 0.01]
+static const auto annealing_param_a = 0.0;          // OPTIMIZE [-15.0, 15.0]
+static const auto annealing_param_b = 1.0;          // OPTIMIZE [0.0, 3.0]
+static const auto fewer_candidates = 0;             // OPTIMIZE [0, 3]
 
 using namespace std;
 
@@ -333,6 +334,8 @@ static constexpr auto kMaxNCandidateEdgesForNode = 200;
 static array<array<Stack<int, kMaxNCandidateEdgesForNode>, 14 * 14 * 14 / 2>, 2>
     candidate_edge_ids_for_each_node;
 
+static auto mean_degree = 0.0;
+
 static void Init() {
     for (auto&& a : candidate_edge_ids_for_each_node)
         for (auto&& b : a)
@@ -381,6 +384,32 @@ static void Init() {
             }
         }
     }
+
+    static const auto kDxyzs = array<Vec3, 6>{
+        Vec3(0, 0, 1),  Vec3(0, 0, -1), Vec3(0, 1, 0),
+        Vec3(0, -1, 0), Vec3(1, 0, 0),  Vec3(-1, 0, 0),
+    };
+    mean_degree = 0.0;
+    for (auto i = 0; i < 2; i++) {
+        auto v = Vec3();
+        for (v.x = 0; v.x < D; v.x++)
+            for (v.y = 0; v.y < D; v.y++)
+                for (v.z = 0; v.z < D; v.z++)
+                    if (coord_to_node_id[i][v.x][v.y][v.z] != -1)
+                        for (const auto& dxyz : kDxyzs) {
+                            const auto u = v + dxyz;
+                            if (u.IsIn())
+                                mean_degree +=
+                                    coord_to_node_id[i][u.x][u.y][u.z] != -1;
+                        }
+    }
+    mean_degree /= (double)nodes.size();
+    cerr << "n_nodes=" << nodes.size() << endl;
+    cerr << "mean_degree=" << mean_degree << endl;
+
+#ifdef DUMP_INFO_ONLY
+    exit(0);
+#endif
 
     // 辺を構築
     edges.clear();
@@ -431,9 +460,12 @@ static void Init() {
 
         auto para = Vec3{};
         auto visited = Cube<bool>();
-        for (para.x = -D + 1; para.x < D; para.x++) {
-            for (para.y = -D + 1; para.y < D; para.y++) {
-                for (para.z = -D + 1; para.z < D; para.z++) {
+        for (para.x = fewer_candidates >= 1 ? 0 : -D + 1; para.x < D;
+             para.x++) {
+            for (para.y = fewer_candidates >= 2 ? 0 : -D + 1; para.y < D;
+                 para.y++) {
+                for (para.z = fewer_candidates >= 3 ? 0 : -D + 1; para.z < D;
+                     para.z++) {
                     auto siz =
                         Vec3(D - abs(para.x), D - abs(para.y), D - abs(para.z));
                     for (b.x = 0; b.x < siz.x; b.x++) {
@@ -595,14 +627,7 @@ static void Init() {
             });
             edge_group.edge_ids.push_back(edge_id);
             edge_group.silhouette |= silhouette;
-            for (const auto dxyz : {
-                     Vec3(0, 0, 1),
-                     Vec3(0, 0, -1),
-                     Vec3(0, 1, 0),
-                     Vec3(0, -1, 0),
-                     Vec3(1, 0, 0),
-                     Vec3(-1, 0, 0),
-                 }) {
+            for (const auto dxyz : kDxyzs) {
                 const auto u = v + dxyz;
                 if (u.IsIn()) {
                     const auto neighbour_edge_id = visited[u.x][u.y][u.z];
@@ -908,6 +933,8 @@ static double ComputeTemperature(const double progress) {
     while (!current.solution.success) {
         current.state.cores.clear();
         current.solution = current.state.Random(200);
+        if (Time() - t0 >= kTimeLimit)
+            exit(1);
     }
 
     auto best_solution = current.solution;
