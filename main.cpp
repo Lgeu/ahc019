@@ -26,6 +26,16 @@
 #pragma GCC optimize("Ofast")
 #endif
 
+static const auto n_candidate_edges_for_node = 100;
+static const auto n_new_core_candidates = 2;
+static const auto remove_2_ratio = 0.5;
+static const auto distance_exponent = 3.0;
+static const auto n_small_core_candidates = 2;
+static const auto start_temperature = 0.5;
+static const auto end_temperature = 0.5;
+static const auto annealing_param_a = 0.0;
+static const auto annealing_param_b = 1.0;
+
 using namespace std;
 
 using i8 = signed char;
@@ -319,8 +329,8 @@ struct EdgeGroup {
 };
 
 static vector<EdgeGroup> edge_groups;
-static constexpr auto n_candidate_edges_for_node = 100; // パラメータ
-static array<array<Stack<int, n_candidate_edges_for_node>, 14 * 14 * 14 / 2>, 2>
+static constexpr auto kMaxNCandidateEdgesForNode = 200;
+static array<array<Stack<int, kMaxNCandidateEdgesForNode>, 14 * 14 * 14 / 2>, 2>
     candidate_edge_ids_for_each_node;
 
 static void Init() {
@@ -499,7 +509,7 @@ static void Init() {
                                         v.z--;
                                     }
                                 }
-                                if (right < 5) // パラメータ
+                                if (right < 5)
                                     continue;
                                 tmp_edge_groups.emplace_back(
                                     tmp_edges.size(), tmp_edges.size() + right);
@@ -777,7 +787,6 @@ struct State {
             // 探索順を決める、ここもうちょっと高速化はできそう
             static array<short, 20000> order;
             iota(order.begin(), order.begin() + pixel.edge_ids.size(), 0);
-            const auto n_new_core_candidates = 2; // パラメータ
             auto new_edge_id = -100;
             auto n_found_candidates = 0;
             auto min_sum_inv_distance = 1e9;
@@ -800,9 +809,8 @@ struct State {
                                             [info::edges[new_edge_id_candidate]
                                                  .node_ids[idx_node_ids]]
                                                 .coord);
-                            // パラメータ
-                            distance *= distance * distance;
-                            sum_inv_distance += 1.0 / (double)(distance);
+                            sum_inv_distance += 1.0 / pow((double)(distance),
+                                                          distance_exponent);
                         }
 
                     if (sum_inv_distance < min_sum_inv_distance) {
@@ -850,10 +858,34 @@ static void Visualize(const array<u8, 5488>& blocks) {
 
 auto t0 = Time();
 
+inline double Sigmoid(const double a, const double x) {
+    return 1.0 / (1.0 + exp(-a * x));
+}
+
+// f: [0, 1] -> [0, 1]
+inline double MonotonicallyIncreasingFunction(const double a, const double b,
+                                              const double x) {
+    if (a == 0.0)
+        return x;
+    const double x_left = a > 0 ? -b - 0.5 : b - 0.5;
+    const double x_right = x_left + 1.0;
+    const double left = Sigmoid(a, x_left);
+    const double right = Sigmoid(a, x_right);
+    const double y = Sigmoid(a, x + x_left);
+    return (y - left) / (right - left);
+}
+
+// f: [0, 1] -> [start, end]
+inline double MonotonicFunction(const double start, const double end,
+                                const double a, const double b,
+                                const double x) {
+    return MonotonicallyIncreasingFunction(a, b, x) * (end - start) + start;
+}
+
 static double ComputeTemperature(const double progress) {
-    static constexpr auto kStartTemperature = 0.5;
-    static constexpr auto kEndTemperature = 0.5;
-    return (1.0 - progress) * kStartTemperature + progress * kEndTemperature;
+    return MonotonicFunction(start_temperature, end_temperature,
+                             annealing_param_a, annealing_param_b, progress);
+    return (1.0 - progress) * start_temperature + progress * end_temperature;
 }
 
 [[maybe_unused]] static void Solve() {
@@ -888,14 +920,13 @@ static double ComputeTemperature(const double progress) {
         auto state = current.state;
         auto block_sizes = current.solution.block_sizes;
         auto n_removed_cores = 0;
-        const auto n_remove = rng.RandInt(2, 3); // パラメータ
+        const auto n_remove = rng.Rand() < remove_2_ratio ? 2 : 3;
         for (auto removing_trial = 0; removing_trial < n_remove;
              removing_trial++) {
             if (state.cores.size() == 0)
                 break;
             auto idx_core = -100;
             auto min_block_size = 99999;
-            const auto n_small_core_candidates = 2; // パラメータ
             for (auto i = 0; i < n_small_core_candidates; i++) {
                 auto idx_core_i = rng.RandInt(0, (int)state.cores.size() - 1);
                 if (block_sizes[idx_core_i] < min_block_size) {
@@ -909,7 +940,6 @@ static double ComputeTemperature(const double progress) {
             n_removed_cores++;
         }
 
-        // TODO: ここは？
         auto solution = state.Random(current.state.cores.size());
         if (!solution.success)
             continue;
