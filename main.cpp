@@ -1,6 +1,7 @@
 #include <algorithm>
 #include <array>
 #include <cassert>
+#include <chrono>
 #include <cstring>
 #include <iostream>
 #include <numeric>
@@ -66,7 +67,7 @@ struct Random {
     static constexpr unsigned min() { return 1u; }
 };
 
-auto rng = Random(42);
+static auto rng = Random(42);
 
 static inline int CountRightZero(const ull x) {
 #ifdef _MSC_VER
@@ -218,7 +219,6 @@ static array<int, 2> n_nodes;
 static array<Cube<short>, 2> coord_to_node_id;
 
 struct Node {
-    // vector<int> edge_ids;
     array<short, 2> pixel_ids;
     Vec3 coord;
 };
@@ -643,7 +643,7 @@ struct State {
     };
     Stack<Core, 200> cores;
 
-    auto SCPCovered() const {
+    inline auto SCPCovered() const {
         auto silhouette = info::Silhouette();
         for (const auto& core : cores)
             silhouette |=
@@ -652,7 +652,7 @@ struct State {
         return silhouette;
     }
 
-    auto BFS() const {
+    inline auto BFS() const {
         // 最後まで行っても埋めきれないか、スコアが超過したかで終了
         struct BFSResult {
             enum struct Status {
@@ -872,23 +872,21 @@ static double ComputeTemperature(const double progress) {
 
     static constexpr auto kTimeLimit = 5.5;
 
-    const auto population_size = 1; // パラメータ
-    auto population = vector<Element>(population_size);
-    for (auto&& [state, solution] : population) {
-        while (!solution.success) {
-            state.cores.clear();
-            solution = state.Random(200);
-        }
+    auto current = Element{};
+    while (!current.solution.success) {
+        current.state.cores.clear();
+        current.solution = current.state.Random(200);
     }
-    auto best_solution = population[0].solution;
+
+    auto best_solution = current.solution;
     auto t = Time() - t0;
     for (auto trial = 0; trial < 1e9; trial++) {
-        if (trial % 16 == 0 && (t = Time() - t0) >= kTimeLimit)
+        if (trial % 16 == 0 && (t = Time() - t0) >= kTimeLimit) {
+            cerr << "executed_trials=" << trial << endl;
             break;
-
-        const auto r = rng.RandInt(0, population_size - 1);
-        auto state = population[r].state;
-        auto block_sizes = population[r].solution.block_sizes;
+        }
+        auto state = current.state;
+        auto block_sizes = current.solution.block_sizes;
         auto n_removed_cores = 0;
         const auto n_remove = rng.RandInt(2, 3); // パラメータ
         for (auto removing_trial = 0; removing_trial < n_remove;
@@ -912,17 +910,16 @@ static double ComputeTemperature(const double progress) {
         }
 
         // TODO: ここは？
-        auto solution = state.Random(population[r].state.cores.size());
+        auto solution = state.Random(current.state.cores.size());
         if (!solution.success)
             continue;
-        const auto gain =
-            log2(population[r].solution.score) - log2(solution.score);
+        const auto gain = log2(current.solution.score) - log2(solution.score);
         const auto progress = t / kTimeLimit;
         const auto temperature = ComputeTemperature(progress);
         const auto acceptance_proba = exp(gain / temperature);
         if (rng.Rand() < acceptance_proba) {
-            population[r].state = state;
-            population[r].solution = solution;
+            current.state = state;
+            current.solution = solution;
         }
         if (solution.score < best_solution.score) {
             best_solution = solution;
@@ -932,15 +929,7 @@ static double ComputeTemperature(const double progress) {
         }
     }
 
-    auto min_n_cores = 99999;
-    for (auto i = 0; i < population_size; i++) {
-        if (min_n_cores > (int)population[i].state.cores.size()) {
-            min_n_cores = (int)population[i].state.cores.size();
-        }
-    }
-
     cerr << "min_score=" << best_solution.score << endl;
-    // cerr << "min_n_cores=" << min_n_cores << endl;
     Visualize(best_solution.blocks);
 }
 
@@ -956,5 +945,4 @@ int main() {
 // core はブロックの中央であった方が良い
 
 // TODO1: チューニング
-// TODO: 3個以上削除するときは2個埋める
-// TODO: GA
+//        体積、平均次数
