@@ -6,6 +6,7 @@
 #include <numeric>
 #include <random>
 #include <tuple>
+#include <type_traits>
 #include <vector>
 #include <x86intrin.h>
 
@@ -278,7 +279,6 @@ static Silhouette full_silhouette;
 struct Edge {
     struct Neighbour {
         int edge_id;
-        i8 direction;
     };
     array<short, 2> node_ids;
     Stack<Neighbour, 6> neighbours;
@@ -575,22 +575,22 @@ static void Init() {
             });
             edge_group.edge_ids.push_back(edge_id);
             edge_group.silhouette |= silhouette;
-            for (const auto& [direction, dxyz] : {
-                     pair<i8, Vec3>{0, Vec3(0, 0, 1)},
-                     {1, Vec3(0, 0, -1)},
-                     {2, Vec3(0, 1, 0)},
-                     {3, Vec3(0, -1, 0)},
-                     {4, Vec3(1, 0, 0)},
-                     {5, Vec3(-1, 0, 0)},
+            for (const auto dxyz : {
+                     Vec3(0, 0, 1),
+                     Vec3(0, 0, -1),
+                     Vec3(0, 1, 0),
+                     Vec3(0, -1, 0),
+                     Vec3(1, 0, 0),
+                     Vec3(-1, 0, 0),
                  }) {
                 const auto u = v + dxyz;
                 if (u.IsIn()) {
                     const auto neighbour_edge_id = visited[u.x][u.y][u.z];
                     if (neighbour_edge_id != -1) {
                         edges[edge_id].neighbours.push_back(
-                            {neighbour_edge_id, direction});
+                            {neighbour_edge_id});
                         edges[neighbour_edge_id].neighbours.push_back(
-                            {edge_id, (i8)(direction ^ 1)});
+                            {edge_id});
                     }
                 }
             }
@@ -623,14 +623,13 @@ static void Init() {
 struct Solution {
     bool success;
     double score;
-    array<short, 5488> blocks;
+    array<u8, 5488> blocks;
     array<short, 200> block_sizes;
 };
 
 struct State {
     struct Core {
         int edge_id;
-        array<bool, 6> dierction_priority;
     };
     Stack<Core, 200> cores;
 
@@ -652,18 +651,18 @@ struct State {
                 kFailureScoreExcess,
             };
             info::Silhouette visited_silhouette;
-            array<short, 14 * 14 * 14 * 2> visited_nodes;
+            array<u8, 14 * 14 * 14 * 2> visited_nodes;
             array<short, 200> block_sizes;
             double score;
             Status status;
         };
         auto res = BFSResult{};
         fill(res.visited_nodes.begin(),
-             res.visited_nodes.begin() + info::nodes.size(), -1);
+             res.visited_nodes.begin() + info::nodes.size(), (u8)-1);
         struct QueueElement {
             int edge_id;
         };
-        static auto qs = vector<Queue<QueueElement, 14 * 14 * 14 * 2>>();
+        static auto qs = vector<Queue<QueueElement, 14 * 14 * 14, 0>>();
         if (qs.size() < cores.size())
             qs.resize(cores.size());
         for (auto core_id = 0; core_id < (int)cores.size(); core_id++) {
@@ -673,23 +672,22 @@ struct State {
             qs[core_id].push_back({edge_id});
             res.visited_silhouette |= edge.silhouette;
         }
-        auto next_core_id = vector<short>(cores.size());
+        auto next_core_id = vector<u8>(cores.size());
         iota(next_core_id.begin(), next_core_id.end() - 1, 1);
         next_core_id.back() = 0;
-        auto last_core_id = (short)-1;
-        for (auto core_id = 0;; core_id = next_core_id[core_id]) {
-            const auto& core = cores[core_id];
+        auto last_core_id = (u8)-1;
+        for (auto core_id = (u8)0;; core_id = next_core_id[core_id]) {
             auto& q = qs[core_id];
             assert(!q.empty());
             int edge_id;
-            while (!q.empty()) {
+            do {
                 edge_id = q.front().edge_id;
                 q.pop_front();
                 const auto& edge = info::edges[edge_id];
-                if (res.visited_nodes[edge.node_ids[0]] == -1 &&
-                    res.visited_nodes[edge.node_ids[1]] == -1)
+                if (res.visited_nodes[edge.node_ids[0]] == (u8)-1 &&
+                    res.visited_nodes[edge.node_ids[1]] == (u8)-1)
                     goto ok;
-            }
+            } while (!q.empty());
             next_core_id[last_core_id] = next_core_id[core_id];
             if (next_core_id[core_id] == core_id)
                 break;
@@ -701,13 +699,15 @@ struct State {
                 res.visited_nodes[edge.node_ids[0]] = core_id;
                 res.visited_nodes[edge.node_ids[1]] = core_id;
                 res.visited_silhouette |= edge.silhouette;
-                for (const auto& neighbour : edge.neighbours) {
-                    if (core.dierction_priority[neighbour.direction]) {
-                        q.push_back({neighbour.edge_id});
-                    } else {
-                        q.push_front({neighbour.edge_id});
-                    }
-                }
+                static_assert(sizeof(decltype(edge.neighbours)::value_type) ==
+                              4);
+                static_assert(
+                    sizeof(remove_reference_t<decltype(q)>::value_type) == 4);
+                memcpy(&q.arr[q.right], edge.neighbours.begin(),
+                       edge.neighbours.size() * 4);
+                q.right += edge.neighbours.size();
+                // for (const auto& neighbour : edge.neighbours)
+                //     q.push_back({neighbour.edge_id});
                 if (q.empty()) { // ほとんど起こらないはず
                     next_core_id[last_core_id] = next_core_id[core_id];
                     if (next_core_id[core_id] == core_id)
@@ -750,10 +750,7 @@ struct State {
                     0, best_edge_group.size() - 1)(rng);
                 const auto edge_id = best_edge_group.edge_ids[r];
                 if (CheckAddable(edge_id)) {
-                    cores.push_back({
-                        edge_id,
-                        {true, true, true, true, true, true},
-                    });
+                    cores.push_back({edge_id});
                     break;
                 }
             }
@@ -774,11 +771,7 @@ struct State {
             const auto& pixel = info::pixels[pixel_id];
             for (const auto new_edge_id : pixel.edge_ids) {
                 if (CheckAddable(new_edge_id)) {
-                    cores.push_back({
-                        new_edge_id,
-                        //{false, false, false, false, false, false},
-                        {true, true, true, true, true, true},
-                    });
+                    cores.push_back({new_edge_id});
                     goto ok2;
                 }
             }
@@ -808,11 +801,7 @@ struct State {
                 continue;
             if (!CheckAddable(edge_id))
                 continue;
-            cores.push_back({
-                edge_id,
-                // {false, false, false, false, false, false},
-                {true, true, true, true, true, true},
-            });
+            cores.push_back({edge_id});
             trial = 0;
             scp_not_covered.AndNotAssign(edge_group.silhouette);
         }
@@ -841,11 +830,7 @@ struct State {
                 const auto new_edge_id = pixel.edge_ids[order[idx_order]];
                 order[idx_order] = order[i];
                 if (CheckAddable(new_edge_id)) {
-                    cores.push_back({
-                        new_edge_id,
-                        // {false, false, false, false, false, false},
-                        {true, true, true, true, true, true},
-                    });
+                    cores.push_back({new_edge_id});
                     goto ok2;
                 }
             }
@@ -865,11 +850,13 @@ struct State {
     }
 };
 
-static void Visualize(const array<short, 5488>& blocks) {
+static void Visualize(const array<u8, 5488>& blocks) {
     auto puzzle = array<Cube<int>, 2>();
     auto n_blocks = 0;
     for (auto node_id = 0; node_id < (int)info::nodes.size(); node_id++) {
         const auto& p = info::nodes[node_id].coord;
+        if (blocks[node_id] == (u8)-1)
+            continue;
         puzzle[p.w][p.x][p.y][p.z] = blocks[node_id] + 1;
         n_blocks = max(n_blocks, blocks[node_id] + 1);
     }
@@ -893,7 +880,7 @@ static void Visualize(const array<short, 5488>& blocks) {
 }
 
 [[maybe_unused]] static void SolveRandomLoop() {
-    array<short, 5488> best_blocks;
+    array<u8, 5488> best_blocks;
     auto min_score = 1e9;
     auto min_n_cores = 200;
     for (auto i = 0; i < 1e4; i++) {
@@ -1017,9 +1004,10 @@ int main() {
 }
 
 // core はブロックの中央であった方が良い
-// core 同士の座標は離す必要がある
 
-// TODO: 大きいのは探索範囲を絞った方が良い
-// TODO: GA
-// TODO1: 3個以上削除するときは2個埋める
+// TODO1: 大きいのは探索範囲を絞った方が良い
+//        離れている core を選ぶようにする
+//        core 同士の距離は node 間距離 2 つの和
 // TODO2: チューニング
+// TODO: 3個以上削除するときは2個埋める
+// TODO: GA
