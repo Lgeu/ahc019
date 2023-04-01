@@ -39,8 +39,6 @@ static inline double Time() {
            1e-9;
 }
 
-// auto rng = mt19937(42);
-
 struct Random {
     using result_type = unsigned;
     ull state;
@@ -268,12 +266,6 @@ struct alignas(64) Silhouette {
             _mm256_cmpeq_epi8(AsM256i()[1], _mm256_setzero_si256());
         const auto nonzero_bytes = ~((ull)(unsigned)_mm256_movemask_epi8(x0) |
                                      (ull)_mm256_movemask_epi8(x1) << 32);
-        if (nonzero_bytes == 0) {
-            cout << "_mm256_movemask_epi8(x1)=" << _mm256_movemask_epi8(x1)
-                 << endl;
-            cout << "(ull)_mm256_movemask_epi8(x1)="
-                 << (ull)_mm256_movemask_epi8(x1) << endl;
-        }
         assert(nonzero_bytes != 0);
         const auto nonzero_byte = ::CountRightZero(nonzero_bytes);
         return nonzero_byte * 8 + ::CountRightZero(AsU8()[nonzero_byte]);
@@ -382,7 +374,7 @@ static void Init() {
     auto tmp_edges = vector<pair<short, short>>();
     auto tmp_edge_groups = vector<pair<int, int>>();
     edge_groups.clear();
-    for (auto p : {
+    for (const auto& p : {
              array<int, 6>{0, 1, 2, 0, 0, 0},
              {0, 1, 2, 0, 1, 1},
              {0, 1, 2, 1, 0, 1},
@@ -737,64 +729,6 @@ struct State {
         return res;
     }
 
-    Solution Greedy() {
-        auto scp_not_covered = info::full_silhouette;
-        scp_not_covered ^= SCPCovered();
-
-        // SCP を貪欲に解く
-        while (!scp_not_covered.empty()) {
-            auto best_edge_group_id = -100;
-            auto best_value = 0;
-            for (auto edge_group_id = 0;
-                 edge_group_id < (int)info::edge_groups.size();
-                 edge_group_id++) {
-                auto edge_group_silhouette =
-                    info::edge_groups[edge_group_id].silhouette;
-                edge_group_silhouette &= scp_not_covered;
-                const auto pc = edge_group_silhouette.PopCount();
-                if (best_value < pc) {
-                    best_value = pc;
-                    best_edge_group_id = edge_group_id;
-                }
-            }
-            const auto& best_edge_group = info::edge_groups[best_edge_group_id];
-            scp_not_covered.AndNotAssign(best_edge_group.silhouette);
-
-            while (true) {
-                const auto r = uniform_int_distribution<>(
-                    0, best_edge_group.size() - 1)(rng);
-                const auto edge_id = best_edge_group.edge_ids[r];
-                if (CheckAddable(edge_id)) {
-                    cores.push_back({edge_id});
-                    break;
-                }
-            }
-        }
-
-        // 01BFS で広げてく
-        while (true) {
-            // BFS
-            const auto bfs_result = BFS();
-            // 全部のシルエット条件を満たしたか確認
-            auto non_visited_silhouette = bfs_result.visited_silhouette;
-            non_visited_silhouette ^= info::full_silhouette;
-            if (non_visited_silhouette.empty())
-                return {true, bfs_result.score, bfs_result.visited_nodes,
-                        bfs_result.block_sizes};
-            // 満たしていない pixel のところに edge を追加
-            const auto pixel_id = non_visited_silhouette.CountRightZero();
-            const auto& pixel = info::pixels[pixel_id];
-            for (const auto new_edge_id : pixel.edge_ids) {
-                if (CheckAddable(new_edge_id)) {
-                    cores.push_back({new_edge_id});
-                    goto ok2;
-                }
-            }
-            assert(false);
-        ok2:;
-        }
-    }
-
     inline Solution Random(const int max_n_cores) {
         auto scp_not_covered = info::full_silhouette;
         scp_not_covered ^= SCPCovered();
@@ -881,40 +815,6 @@ static void Visualize(const array<u8, 5488>& blocks) {
     puzzle[1].Visualize();
 }
 
-[[maybe_unused]] static void SolveGreedy() {
-    auto state = State();
-    auto blocks = state.Greedy().blocks;
-    Visualize(blocks);
-}
-
-[[maybe_unused]] static void SolveRandom() {
-    auto state = State();
-    auto [success, _, blocks, block_sizes] = state.Random(200);
-    assert(success);
-    Visualize(blocks);
-}
-
-[[maybe_unused]] static void SolveRandomLoop() {
-    array<u8, 5488> best_blocks;
-    auto min_score = 1e9;
-    auto min_n_cores = 200;
-    for (auto i = 0; i < 1e4; i++) {
-        auto state = State();
-        auto [success, score, blocks, block_sizes] = state.Random(min_n_cores);
-        if (!success)
-            continue;
-        if ((int)state.cores.size() < min_n_cores) {
-            min_n_cores = (int)state.cores.size();
-        }
-        if (score < min_score) {
-            min_score = score;
-            best_blocks = blocks;
-        }
-    }
-    cerr << "min_score=" << min_score << endl;
-    cerr << "min_n_cores=" << min_n_cores << endl;
-    Visualize(best_blocks);
-}
 auto t0 = Time();
 
 static double ComputeTemperature(const double progress) {
@@ -1012,9 +912,6 @@ static double ComputeTemperature(const double progress) {
 
 int main() {
     Init();
-    // SolveGreedy();
-    // SolveRandom();
-    // SolveRandomLoop();
     Solve();
 }
 
