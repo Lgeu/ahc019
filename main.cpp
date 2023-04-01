@@ -620,6 +620,7 @@ struct Solution {
     bool success;
     double score;
     array<short, 5488> blocks;
+    array<short, 200> block_sizes;
 };
 
 struct State {
@@ -762,7 +763,8 @@ struct State {
             auto non_visited_silhouette = bfs_result.visited_silhouette;
             non_visited_silhouette ^= info::full_silhouette;
             if (non_visited_silhouette.empty())
-                return {true, bfs_result.score, bfs_result.visited_nodes};
+                return {true, bfs_result.score, bfs_result.visited_nodes,
+                        bfs_result.block_sizes};
             // 満たしていない pixel のところに edge を追加
             const auto pixel_id = non_visited_silhouette.CountRightZero();
             const auto& pixel = info::pixels[pixel_id];
@@ -789,9 +791,9 @@ struct State {
         auto trial = 0;
         while (!scp_not_covered.empty()) {
             if (max_n_cores <= (int)cores.size())
-                return {false, 1e9, {}};
+                return {false, 1e9, {}, {}};
             if (trial++ >= 50)
-                return {false, 1e9, {}};
+                return {false, 1e9, {}, {}};
             const auto edge_id = rng.RandInt(0, info::edges.size() - 1);
             const auto& edge = info::edges[edge_id];
             const auto edge_group_id = edge.edge_group_id;
@@ -818,10 +820,11 @@ struct State {
             auto non_visited_silhouette = bfs_result.visited_silhouette;
             non_visited_silhouette ^= info::full_silhouette;
             if (non_visited_silhouette.empty())
-                return {true, bfs_result.score, bfs_result.visited_nodes};
+                return {true, bfs_result.score, bfs_result.visited_nodes,
+                        bfs_result.block_sizes};
             // 失敗
             if (max_n_cores <= (int)cores.size())
-                return {false, 1e9, {}};
+                return {false, 1e9, {}, {}};
             // 満たしていない pixel のところに edge を追加
             // この順番もランダムにした方が良いのか？
             const auto pixel_id = non_visited_silhouette.CountRightZero();
@@ -842,7 +845,7 @@ struct State {
                     goto ok2;
                 }
             }
-            return {false, 1e9, {}};
+            return {false, 1e9, {}, {}};
             assert(false);
         ok2:;
         }
@@ -880,7 +883,7 @@ static void Visualize(const array<short, 5488>& blocks) {
 
 [[maybe_unused]] static void SolveRandom() {
     auto state = State();
-    auto [success, _, blocks] = state.Random(200);
+    auto [success, _, blocks, block_sizes] = state.Random(200);
     assert(success);
     Visualize(blocks);
 }
@@ -891,7 +894,7 @@ static void Visualize(const array<short, 5488>& blocks) {
     auto min_n_cores = 200;
     for (auto i = 0; i < 1e4; i++) {
         auto state = State();
-        auto [success, score, blocks] = state.Random(min_n_cores);
+        auto [success, score, blocks, block_sizes] = state.Random(min_n_cores);
         if (!success)
             continue;
         if ((int)state.cores.size() < min_n_cores) {
@@ -930,19 +933,31 @@ auto t0 = Time();
             solution = state.Random(200);
         }
     }
-    for (auto i = 0; i < 1e9; i++) {
-        if (i % 16 == 0 && Time() - t0 >= 5.5)
+    for (auto trail = 0; trail < 1e9; trail++) {
+        if (trail % 16 == 0 && Time() - t0 >= 5.5)
             break;
 
         const auto r = rng.RandInt(0, population_size - 1);
         auto state = population[r].state;
+        auto block_sizes = population[r].solution.block_sizes;
         auto n_removed_cores = 0;
         const auto n_remove = rng.RandInt(2, 3); // パラメータ
-        for (auto i = 0; i < n_remove; i++) {
+        for (auto removing_trial = 0; removing_trial < n_remove;
+             removing_trial++) {
             if (state.cores.size() == 0)
                 break;
-            state.cores[rng.RandInt(0, (int)state.cores.size() - 1)] =
-                state.cores[state.cores.size() - 1];
+            auto idx_core = -100;
+            auto min_block_size = 99999;
+            const auto n_small_core_candidates = 2; // パラメータ
+            for (auto i = 0; i < n_small_core_candidates; i++) {
+                auto idx_core_i = rng.RandInt(0, (int)state.cores.size() - 1);
+                if (block_sizes[idx_core_i] < min_block_size) {
+                    min_block_size = block_sizes[idx_core_i];
+                    idx_core = idx_core_i;
+                }
+            }
+            state.cores[idx_core] = state.cores[state.cores.size() - 1];
+            block_sizes[idx_core] = block_sizes[state.cores.size() - 1];
             state.cores.pop_back();
             n_removed_cores++;
         }
@@ -989,6 +1004,6 @@ int main() {
 // core 同士の座標は離す必要がある
 
 // TODO: 大きいのは探索範囲を絞った方が良い
-// TODO1: 小さいやつを消す
-// TODO2: 焼きなます
-// TODO3: GA
+// TODO1: 焼きなます
+// TODO2: GA
+// TODO: 3個以上削除するときは2個埋める
