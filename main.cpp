@@ -8,7 +8,22 @@
 #include <tuple>
 #include <type_traits>
 #include <vector>
+
+#ifdef _MSC_VER
+#include <intrin.h>
+#endif
+#ifdef __GNUC__
 #include <x86intrin.h>
+#endif
+
+#ifdef __clang__
+#pragma clang attribute push(__attribute__((target("arch=skylake"))),          \
+                             apply_to = function)
+#elif defined(__GNUC__)
+#pragma GCC target(                                                            \
+    "sse,sse2,sse3,ssse3,sse4,popcnt,abm,mmx,avx,avx2,tune=native")
+#pragma GCC optimize("Ofast")
+#endif
 
 using namespace std;
 
@@ -1002,6 +1017,10 @@ int main() {
     // SolveRandomLoop();
     Solve();
 }
+
+#ifdef __clang__
+#pragma clang attribute pop
+#endif
 
 // core はブロックの中央であった方が良い
 
