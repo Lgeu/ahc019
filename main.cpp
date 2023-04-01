@@ -192,6 +192,9 @@ struct alignas(4) Vec3 {
         const auto& D = input.D;
         return 0 <= x && x < D && 0 <= y && y < D && 0 <= z && z < D;
     }
+    auto L1Distance(const Vec3& rhs) const {
+        return abs(x - rhs.x) + abs(y - rhs.y) + abs(z - rhs.z);
+    }
     void Print(ostream& os) const {
         os << (int)x << "," << (int)y << "," << (int)z;
     }
@@ -754,7 +757,7 @@ struct State {
             trial = 0;
             scp_not_covered.AndNotAssign(edge_group.silhouette);
         }
-        // 01BFS で広げてく
+        // BFS で広げてく
         while (true) {
             // BFS
             const auto bfs_result = BFS();
@@ -774,27 +777,57 @@ struct State {
             // 探索順を決める、ここもうちょっと高速化はできそう
             static array<short, 20000> order;
             iota(order.begin(), order.begin() + pixel.edge_ids.size(), 0);
+            const auto n_new_core_candidates = 2; // パラメータ
+            auto new_edge_id = -100;
+            auto n_found_candidates = 0;
+            auto min_sum_inv_distance = 1e9;
             for (auto i = (int)pixel.edge_ids.size() - 1; i >= 0; i--) {
                 const auto idx_order = rng.RandInt(0, i);
-                const auto new_edge_id = pixel.edge_ids[order[idx_order]];
+                const auto new_edge_id_candidate =
+                    pixel.edge_ids[order[idx_order]];
                 order[idx_order] = order[i];
-                if (CheckAddable(new_edge_id)) {
-                    cores.push_back({new_edge_id});
-                    goto ok2;
+                if (CheckAddable(new_edge_id_candidate)) {
+                    n_found_candidates++;
+                    auto sum_inv_distance = 0.0;
+                    for (const auto& core : cores)
+                        for (auto idx_node_ids = 0; idx_node_ids < 2;
+                             idx_node_ids++) {
+                            auto distance =
+                                info::nodes[info::edges[core.edge_id]
+                                                .node_ids[idx_node_ids]]
+                                    .coord.L1Distance(
+                                        info::nodes
+                                            [info::edges[new_edge_id_candidate]
+                                                 .node_ids[idx_node_ids]]
+                                                .coord);
+                            // パラメータ
+                            distance *= distance * distance;
+                            sum_inv_distance += 1.0 / (double)(distance);
+                        }
+
+                    if (sum_inv_distance < min_sum_inv_distance) {
+                        new_edge_id = new_edge_id_candidate;
+                        min_sum_inv_distance = sum_inv_distance;
+                    }
+                    if (n_found_candidates == n_new_core_candidates)
+                        goto ok2;
                 }
             }
-            return {false, 1e9, {}, {}};
-            assert(false);
+            if (n_found_candidates == 0)
+                return {false, 1e9, {}, {}};
         ok2:;
+            cores.push_back({new_edge_id});
         }
     }
 
     bool CheckAddable(const int edge_id) const {
-        for (const auto& core : cores)
-            for (const auto core_node_id : info::edges[core.edge_id].node_ids)
-                for (const auto new_node_id : info::edges[edge_id].node_ids)
-                    if (core_node_id == new_node_id)
-                        return false;
+        const auto& node_ids = info::edges[edge_id].node_ids;
+        for (const auto& core : cores) {
+            if (info::edges[core.edge_id].node_ids[0] == node_ids[0])
+                return false;
+            if (info::edges[core.edge_id].node_ids[1] == node_ids[1])
+                return false;
+        }
         return true;
     }
 };
@@ -878,6 +911,7 @@ static double ComputeTemperature(const double progress) {
             n_removed_cores++;
         }
 
+        // TODO: ここは？
         auto solution = state.Random(population[r].state.cores.size());
         if (!solution.success)
             continue;
@@ -921,9 +955,6 @@ int main() {
 
 // core はブロックの中央であった方が良い
 
-// TODO1: 大きいのは探索範囲を絞った方が良い
-//        離れている core を選ぶようにする
-//        core 同士の距離は node 間距離 2 つの和
-// TODO2: チューニング
+// TODO1: チューニング
 // TODO: 3個以上削除するときは2個埋める
 // TODO: GA
