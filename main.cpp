@@ -309,7 +309,7 @@ struct EdgeGroup {
 };
 
 static vector<EdgeGroup> edge_groups;
-static constexpr auto n_candidate_edges_for_node = 50; // パラメータ
+static constexpr auto n_candidate_edges_for_node = 100; // パラメータ
 static array<array<Stack<int, n_candidate_edges_for_node>, 14 * 14 * 14 / 2>, 2>
     candidate_edge_ids_for_each_node;
 
@@ -917,7 +917,7 @@ auto t0 = Time();
 
 static double ComputeTemperature(const double progress) {
     static constexpr auto kStartTemperature = 0.5;
-    static constexpr auto kEndTemperature = 0.01;
+    static constexpr auto kEndTemperature = 0.5;
     return (1.0 - progress) * kStartTemperature + progress * kEndTemperature;
 }
 
