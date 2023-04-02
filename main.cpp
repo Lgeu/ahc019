@@ -26,7 +26,7 @@
 #pragma GCC optimize("O3")
 #endif
 
-static auto n_candidate_edges_for_node = 100;
+static auto n_candidate_edges_for_node = 150;
 static auto n_new_core_candidates = 2;
 static auto remove_2_ratio = 0.5;
 static auto distance_exponent = 2.0;
@@ -414,15 +414,12 @@ static void Init() {
     if (nodes.size() < 173) {
         if (mean_degree < 3.1592966666666666) {
             // a
-            n_candidate_edges_for_node = 132;
             remove_2_ratio = 0.9218864823439933;
         } else if (mean_degree <= 3.5939) {
             // b
-            n_candidate_edges_for_node = 150;
-            remove_2_ratio = 0.7042405590788633;
+            remove_2_ratio = 0.8398777100272572;
         } else {
             // c
-            n_candidate_edges_for_node = 161;
             remove_2_ratio = 0.056701157366232935;
         }
         n_new_core_candidates = 2;
@@ -435,7 +432,6 @@ static void Init() {
             annealing_param_a = -7.181959083657732;
             annealing_param_b = 0.006935683724648756;
             end_temperature = 0.7805181254898048;
-            n_candidate_edges_for_node = 174;
             remove_2_ratio = 0.4720546444669666;
             start_temperature = 2.2426956006292613;
         } else if (mean_degree <= 4.399126666666667) {
@@ -443,7 +439,6 @@ static void Init() {
             annealing_param_a = -4.271183370533636;
             annealing_param_b = 1.537547480976249;
             end_temperature = 1.0563753419550566;
-            n_candidate_edges_for_node = 124;
             remove_2_ratio = 0.9204116097148919;
             start_temperature = 2.5613498004124264;
         } else {
@@ -451,7 +446,6 @@ static void Init() {
             annealing_param_a = 2.431448945527027;
             annealing_param_b = 0.02508515581387205;
             end_temperature = 2.6682468037906912;
-            n_candidate_edges_for_node = 163;
             remove_2_ratio = 0.9912314538913594;
             start_temperature = 0.6473180196690247;
         }
@@ -463,23 +457,20 @@ static void Init() {
             annealing_param_a = -9.87155675256468;
             annealing_param_b = 2.1181607666471;
             end_temperature = 0.48333592195366826;
-            n_candidate_edges_for_node = 107;
             remove_2_ratio = 0.9733052823543014;
             start_temperature = 4.979551144728833;
         } else if (mean_degree <= 4.83589) {
             // h
-            annealing_param_a = -7.373480788395982;
-            annealing_param_b = 2.0054413390420303;
-            end_temperature = 1.3017088526343317;
-            n_candidate_edges_for_node = 126;
-            remove_2_ratio = 0.7291058509744781;
-            start_temperature = 2.1674465553345086;
+            annealing_param_a = -3.489694694019225;
+            annealing_param_b = 2.7825041793733574;
+            end_temperature = 1.2997699433076362;
+            remove_2_ratio = 0.5004234409045778;
+            start_temperature = 2.731243073332406;
         } else {
             // i
             annealing_param_a = -3.3550288393623484;
             annealing_param_b = 2.162164664274324;
             end_temperature = 1.1435152636621457;
-            n_candidate_edges_for_node = 148;
             remove_2_ratio = 0.6341158338628746;
             start_temperature = 3.3780372808987322;
         }
@@ -487,8 +478,6 @@ static void Init() {
         n_new_core_candidates = 3;
         n_small_core_candidates = 3;
     }
-    distance_exponent = 2.0;
-    n_candidate_edges_for_node = 150;
 
     // 辺を構築
     edges.clear();
@@ -944,13 +933,14 @@ static void Visualize(const array<u8, 5488>& blocks) {
 
 auto t0 = Time();
 
-inline double Sigmoid(const double a, const double x) {
+static inline double Sigmoid(const double a, const double x) {
     return 1.0 / (1.0 + exp(-a * x));
 }
 
 // f: [0, 1] -> [0, 1]
-inline double MonotonicallyIncreasingFunction(const double a, const double b,
-                                              const double x) {
+static inline double MonotonicallyIncreasingFunction(const double a,
+                                                     const double b,
+                                                     const double x) {
     if (a == 0.0)
         return x;
     const double x_left = a > 0 ? -b - 0.5 : b - 0.5;
@@ -962,13 +952,13 @@ inline double MonotonicallyIncreasingFunction(const double a, const double b,
 }
 
 // f: [0, 1] -> [start, end]
-inline double MonotonicFunction(const double start, const double end,
-                                const double a, const double b,
-                                const double x) {
+static inline double MonotonicFunction(const double start, const double end,
+                                       const double a, const double b,
+                                       const double x) {
     return MonotonicallyIncreasingFunction(a, b, x) * (end - start) + start;
 }
 
-static double ComputeTemperature(const double progress) {
+static inline double ComputeTemperature(const double progress) {
     return MonotonicFunction(start_temperature, end_temperature,
                              annealing_param_a, annealing_param_b, progress);
     return (1.0 - progress) * start_temperature + progress * end_temperature;
@@ -980,7 +970,7 @@ static double ComputeTemperature(const double progress) {
         Solution solution;
     };
 
-    static constexpr auto kTimeLimit = 5.5;
+    static constexpr auto kTimeLimit = 5.8;
 
     auto current = Element{};
     while (!current.solution.success) {
@@ -1040,24 +1030,7 @@ static double ComputeTemperature(const double progress) {
     Visualize(best_solution.blocks);
 }
 
-void ReadArgs(int argc, const char* const* const argv) {
-    if (argc >= 5) {
-        assert(argc == 10);
-        n_candidate_edges_for_node = atoi(argv[1]);
-        n_new_core_candidates = atoi(argv[2]);
-        remove_2_ratio = atof(argv[2]);
-        distance_exponent = atof(argv[3]);
-        n_small_core_candidates = atoi(argv[4]);
-        start_temperature = atof(argv[5]);
-        end_temperature = atof(argv[6]);
-        annealing_param_a = atof(argv[7]);
-        annealing_param_b = atof(argv[8]);
-        fewer_candidates = atoi(argv[9]);
-    }
-}
-
-int main(const int argc, const char* const* const argv) {
-    ReadArgs(argc, argv);
+int main() {
     Init();
     Solve();
 }
@@ -1065,6 +1038,3 @@ int main(const int argc, const char* const* const argv) {
 #ifdef __clang__
 #pragma clang attribute pop
 #endif
-
-// TODO: 条件分岐
-// TODO: 失敗時の処理
