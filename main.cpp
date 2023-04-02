@@ -26,16 +26,16 @@
 #pragma GCC optimize("O3")
 #endif
 
-static auto n_candidate_edges_for_node = 100; // OPTIMIZE LOG [20, 200]
-static auto n_new_core_candidates = 2;        // OPTIMIZE [1, 4]
-static auto remove_2_ratio = 0.5;             // OPTIMIZE [0.0, 1.0]
-static auto distance_exponent = 3.0;          // OPTIMIZE LOG [0.5, 8.0]
-static auto n_small_core_candidates = 2;      // OPTIMIZE [1, 4]
-static auto start_temperature = 0.5;          // OPTIMIZE LOG [5.0, 0.2]
-static auto end_temperature = 0.5;            // OPTIMIZE LOG [5.0, 0.01]
-static auto annealing_param_a = 0.0;          // OPTIMIZE [-15.0, 15.0]
-static auto annealing_param_b = 1.0;          // OPTIMIZE [0.0, 3.0]
-static auto fewer_candidates = 0;             // OPTIMIZE [0, 3]
+static auto n_candidate_edges_for_node = 100;
+static auto n_new_core_candidates = 2;
+static auto remove_2_ratio = 0.5;
+static auto distance_exponent = 3.0;
+static auto n_small_core_candidates = 2;
+static auto start_temperature = 0.5;
+static auto end_temperature = 0.5;
+static auto annealing_param_a = 0.0;
+static auto annealing_param_b = 1.0;
+static auto fewer_candidates = 0;
 
 using namespace std;
 
@@ -411,6 +411,181 @@ static void Init() {
     exit(0);
 #endif
 
+    if (nodes.size() < 173) {
+        if (mean_degree < 3.1592966666666666) {
+            // a
+            annealing_param_a = 9.281041735865584;
+            annealing_param_b = 0.755761675873166;
+            distance_exponent = 2.24612681442502;
+            end_temperature = 4.977162666569353;
+            // fewer_candidates = 1;
+            n_candidate_edges_for_node = 132;
+            n_new_core_candidates = 3;
+            n_small_core_candidates = 1;
+            remove_2_ratio = 0.9218864823439933;
+            start_temperature = 3.379009304048146;
+
+            // annealing_param_a = 12.334226294513964;
+            // annealing_param_b = 0.7247766149339714;
+            // distance_exponent = 1.1437305935889017;
+            // end_temperature = 4.180787408899703;
+            // // fewer_candidates = 0;
+            // n_candidate_edges_for_node = 100;
+            // n_new_core_candidates = 4;
+            // n_small_core_candidates = 2;
+            // remove_2_ratio = 0.9296385303490714;
+            // start_temperature = 1.4442435642986096;
+        } else if (mean_degree <= 3.5939) {
+            // b
+            annealing_param_a = -3.8036510914898054;
+            annealing_param_b = 0.33247766727849754;
+            distance_exponent = 1.212568753086613;
+            end_temperature = 3.4510828069379693;
+            // fewer_candidates = 2;
+            n_candidate_edges_for_node = 150;
+            n_new_core_candidates = 2;
+            n_small_core_candidates = 4;
+            remove_2_ratio = 0.7042405590788633;
+            start_temperature = 1.574978192219687;
+        } else {
+            // c
+            annealing_param_a = 8.983338044665098;
+            annealing_param_b = 0.9746574201506142;
+            distance_exponent = 1.6465702218967575;
+            end_temperature = 3.232549384736448;
+            // fewer_candidates = 0;
+            n_candidate_edges_for_node = 161;
+            n_new_core_candidates = 1;
+            n_small_core_candidates = 1;
+            remove_2_ratio = 0.056701157366232935;
+            start_temperature = 1.3094862288348152;
+        }
+        n_new_core_candidates = 2;
+        n_small_core_candidates = 2;
+        start_temperature = end_temperature = 3.0;
+    } else if (nodes.size() <= 514) {
+        if (mean_degree < 3.8762033333333337) {
+            // d
+            // annealing_param_a = -2.3303092964583256;
+            // annealing_param_b = 0.3768737975764036;
+            // distance_exponent = 2.050737183901857;
+            // end_temperature = 1.3518308677803337;
+            // // fewer_candidates = 2;
+            // n_candidate_edges_for_node = 151;
+            // n_new_core_candidates = 4;
+            // n_small_core_candidates = 3;
+            // remove_2_ratio = 0.17200041081790612;
+            // start_temperature = 0.33723406336026057;
+            annealing_param_a = -7.181959083657732;
+            annealing_param_b = 0.006935683724648756;
+            distance_exponent = 2.9018179948796385;
+            end_temperature = 0.7805181254898048;
+            // fewer_candidates = 3;
+            n_candidate_edges_for_node = 174;
+            n_new_core_candidates = 4;
+            n_small_core_candidates = 4;
+            remove_2_ratio = 0.4720546444669666;
+            start_temperature = 2.2426956006292613;
+        } else if (mean_degree <= 4.399126666666667) {
+            // e
+            // annealing_param_a = -7.304700540663429;
+            // annealing_param_b = 1.8765568688107896;
+            // distance_exponent = 1.3835939206625643;
+            // end_temperature = 0.08018194527887124;
+            // // fewer_candidates = 3;
+            // n_candidate_edges_for_node = 154;
+            // n_new_core_candidates = 3;
+            // n_small_core_candidates = 1;
+            // remove_2_ratio = 0.8894474572080957;
+            // start_temperature = 2.341037539302354;
+            annealing_param_a = -4.271183370533636;
+            annealing_param_b = 1.537547480976249;
+            distance_exponent = 2.3947755899382566;
+            end_temperature = 1.0563753419550566;
+            // fewer_candidates = 2;
+            n_candidate_edges_for_node = 124;
+            n_new_core_candidates = 4;
+            n_small_core_candidates = 2;
+            remove_2_ratio = 0.9204116097148919;
+            start_temperature = 2.5613498004124264;
+        } else {
+            // f
+            annealing_param_a = 2.431448945527027;
+            annealing_param_b = 0.02508515581387205;
+            distance_exponent = 1.5765391486410198;
+            end_temperature = 2.6682468037906912;
+            // fewer_candidates = 0;
+            n_candidate_edges_for_node = 163;
+            n_new_core_candidates = 3;
+            n_small_core_candidates = 4;
+            remove_2_ratio = 0.9912314538913594;
+            start_temperature = 0.6473180196690247;
+        }
+        n_new_core_candidates = 3;
+        n_small_core_candidates = 3;
+    } else {
+        if (mean_degree < 4.414796666666667) {
+            // g
+            // annealing_param_a = -6.380400005651133;
+            // annealing_param_b = 2.228470149170637;
+            // distance_exponent = 2.1486560203398812;
+            // end_temperature = 0.010660882000663285;
+            // // fewer_candidates = 2;
+            // n_candidate_edges_for_node = 122;
+            // n_new_core_candidates = 3;
+            // n_small_core_candidates = 3;
+            // remove_2_ratio = 0.8131230480965274;
+            // start_temperature = 4.4870417435059915;
+            annealing_param_a = -9.87155675256468;
+            annealing_param_b = 2.1181607666471;
+            distance_exponent = 2.108267547382123;
+            end_temperature = 0.48333592195366826;
+            // fewer_candidates = 1;
+            n_candidate_edges_for_node = 107;
+            n_new_core_candidates = 4;
+            n_small_core_candidates = 2;
+            remove_2_ratio = 0.9733052823543014;
+            start_temperature = 4.979551144728833;
+        } else if (mean_degree <= 4.83589) {
+            // h
+            // annealing_param_a = -12.310859996243202;
+            // annealing_param_b = 2.126039587659437;
+            // distance_exponent = 1.9682861154741456;
+            // end_temperature = 1.2914619194165504;
+            // // fewer_candidates = 2;
+            // n_candidate_edges_for_node = 132;
+            // n_new_core_candidates = 3;
+            // n_small_core_candidates = 2;
+            // remove_2_ratio = 0.9219710652316301;
+            // start_temperature = 1.7308583334921623;
+            annealing_param_a = -7.373480788395982;
+            annealing_param_b = 2.0054413390420303;
+            distance_exponent = 2.159899232206193;
+            end_temperature = 1.3017088526343317;
+            // fewer_candidates = 1;
+            n_candidate_edges_for_node = 126;
+            n_new_core_candidates = 4;
+            n_small_core_candidates = 3;
+            remove_2_ratio = 0.7291058509744781;
+            start_temperature = 2.1674465553345086;
+        } else {
+            // i
+            annealing_param_a = -4.516681431999736;
+            annealing_param_b = 2.4483226153940274;
+            distance_exponent = 1.6602090852236913;
+            end_temperature = 0.025619046849009397;
+            // fewer_candidates = 3;
+            n_candidate_edges_for_node = 159;
+            n_new_core_candidates = 2;
+            n_small_core_candidates = 4;
+            remove_2_ratio = 0.6151371885651054;
+            start_temperature = 3.0334300991941463;
+        }
+        fewer_candidates = 1;
+        n_new_core_candidates = 3;
+        n_small_core_candidates = 3;
+    }
+
     // 辺を構築
     edges.clear();
     auto tmp_edges = vector<pair<short, short>>();
@@ -563,8 +738,6 @@ static void Init() {
                 }
             }
         }
-        // cerr << "tmp_edge_groups.size()=" << tmp_edge_groups.size() << endl;
-        // cerr << "tmp_edges.size()=" << tmp_edges.size() << endl;
     }
 
     sort(tmp_edge_groups.begin(), tmp_edge_groups.end(),
@@ -643,19 +816,6 @@ static void Init() {
     }
 
     cerr << "edge_groups.size()=" << edge_groups.size() << endl;
-    // cerr << "edge_groups[0].size()=" << edge_groups[0].size() << endl;
-    // for (const auto edge_id : edge_groups[0].edge_ids) {
-    //     const auto& e = edges[edge_id];
-    //     for (auto i = 0; i < 2; i++) {
-    //         const auto node_id = e.node_ids[i];
-    //         const auto v = nodes[node_id].coord;
-    //         v.Print(cerr);
-    //         cerr << " ";
-    //     }
-    //     cerr << endl;
-    // }
-    // edge_groups[0].Visualize();
-    // edge_groups[1].Visualize();
 }
 
 } // namespace info
@@ -688,7 +848,6 @@ struct State {
     }
 
     inline auto BFS() const {
-        // 最後まで行っても埋めきれないか、スコアが超過したかで終了
         struct BFSResult {
             enum struct Status {
                 kSuccess,
@@ -751,8 +910,6 @@ struct State {
                 memcpy(&q.arr[q.right], edge.neighbours.begin(),
                        edge.neighbours.size() * 4);
                 q.right += edge.neighbours.size();
-                // for (const auto& neighbour : edge.neighbours)
-                //     q.push_back({neighbour.edge_id});
                 if (q.empty()) { // ほとんど起こらないはず
                     next_core_id[last_core_id] = next_core_id[core_id];
                     if (next_core_id[core_id] == core_id)
@@ -810,7 +967,7 @@ struct State {
             const auto pixel_id = non_visited_silhouette.CountRightZero();
             const auto& pixel = info::pixels[pixel_id];
             // 探索順を決める、ここもうちょっと高速化はできそう
-            static array<short, 20000> order;
+            static array<short, 50000> order;
             iota(order.begin(), order.begin() + pixel.edge_ids.size(), 0);
             auto new_edge_id = -100;
             auto n_found_candidates = 0;
@@ -914,14 +1071,6 @@ static double ComputeTemperature(const double progress) {
 }
 
 [[maybe_unused]] static void Solve() {
-    // TODO
-    // プールを用意する
-    // * 完全ランダムに作成してスコア低いやつと置き換え
-    // * どれか 1 つを、半分くらい core (特に小さいブロック？) を
-    //   消してその後ランダムに継ぎ足し、スコア改善で置き換え
-    // * どれか 1 つの state の 1/3 くらいの core に
-    //   他の state 内の core を継ぎ足し
-
     struct Element {
         State state;
         Solution solution;
@@ -980,26 +1129,12 @@ static double ComputeTemperature(const double progress) {
         }
         if (solution.score < best_solution.score) {
             best_solution = solution;
-            // cerr << "Improved!  i=" << i;
-            // cerr << "  score=" << solution.score;
-            // cerr << "  cores.size()=" << state.cores.size() << endl;
         }
     }
 
     cerr << "min_score=" << best_solution.score << endl;
     Visualize(best_solution.blocks);
 }
-
-// static auto n_candidate_edges_for_node = 100; // OPTIMIZE LOG [20, 200]
-// static auto n_new_core_candidates = 2;        // OPTIMIZE [1, 4]
-// static auto remove_2_ratio = 0.5;             // OPTIMIZE [0.0, 1.0]
-// static auto distance_exponent = 3.0;          // OPTIMIZE LOG [0.5, 8.0]
-// static auto n_small_core_candidates = 2;      // OPTIMIZE [1, 4]
-// static auto start_temperature = 0.5;          // OPTIMIZE LOG [5.0, 0.2]
-// static auto end_temperature = 0.5;            // OPTIMIZE LOG [5.0, 0.01]
-// static auto annealing_param_a = 0.0;          // OPTIMIZE [-15.0, 15.0]
-// static auto annealing_param_b = 1.0;          // OPTIMIZE [0.0, 3.0]
-// static auto fewer_candidates = 0;             // OPTIMIZE [0, 3]
 
 void ReadArgs(int argc, const char* const* const argv) {
     if (argc >= 5) {
@@ -1026,11 +1161,6 @@ int main(const int argc, const char* const* const argv) {
 #ifdef __clang__
 #pragma clang attribute pop
 #endif
-
-// core はブロックの中央であった方が良い
-
-// TODO1: チューニング
-//        体積、平均次数
 
 // TODO: 条件分岐
 // TODO: 失敗時の処理

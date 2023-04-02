@@ -9,7 +9,7 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 
 N = 100
 
-scores = [0] * N
+scores = [30.0] * N
 
 
 def read_stream(name, in_file, out_file):
@@ -30,7 +30,8 @@ def run(cmd, name, timeout=None):
     try:
         proc.wait(timeout=timeout)
     except TimeoutError:
-        pass
+        print(f"[{name}] Timeout!", file=sys.stderr)
+        proc.kill()
     return proc
 
 
@@ -40,9 +41,10 @@ out_dir.mkdir()
 with ThreadPoolExecutor(4) as executor:
     futures = []
     for i in range(N):
+        in_file = f"./tools/in/{i:04d}.txt"
         out_file = out_dir / f"{i:04d}.txt"
-        cmd = f"./a.out < ./tools/in/{i:04d}.txt > {out_file} && ./tools/target/release/vis ./tools/in/{i:04d}.txt {out_file}"
-        futures.append(executor.submit(run, cmd, i))
+        cmd = f"./a.out < {in_file} > {out_file} && ./tools/target/release/vis {in_file} {out_file}"
+        futures.append(executor.submit(run, cmd, i, 10.0))
     as_completed(futures)
 
 mean_score = sum(scores) / len(scores)
@@ -50,3 +52,5 @@ mean_score = sum(scores) / len(scores)
 print(f"Mean Score = {mean_score}")
 
 shutil.move(out_dir, f"{out_dir}_{mean_score:.2f}")
+
+exit()
