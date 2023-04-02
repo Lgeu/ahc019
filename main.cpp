@@ -26,16 +26,16 @@
 #pragma GCC optimize("O3")
 #endif
 
-static const auto n_candidate_edges_for_node = 100; // OPTIMIZE LOG [20, 200]
-static const auto n_new_core_candidates = 2;        // OPTIMIZE [1, 4]
-static const auto remove_2_ratio = 0.5;             // OPTIMIZE [0.0, 1.0]
-static const auto distance_exponent = 3.0;          // OPTIMIZE LOG [0.5, 8.0]
-static const auto n_small_core_candidates = 2;      // OPTIMIZE [1, 4]
-static const auto start_temperature = 0.5;          // OPTIMIZE LOG [5.0, 0.2]
-static const auto end_temperature = 0.5;            // OPTIMIZE LOG [5.0, 0.01]
-static const auto annealing_param_a = 0.0;          // OPTIMIZE [-15.0, 15.0]
-static const auto annealing_param_b = 1.0;          // OPTIMIZE [0.0, 3.0]
-static const auto fewer_candidates = 0;             // OPTIMIZE [0, 3]
+static auto n_candidate_edges_for_node = 100; // OPTIMIZE LOG [20, 200]
+static auto n_new_core_candidates = 2;        // OPTIMIZE [1, 4]
+static auto remove_2_ratio = 0.5;             // OPTIMIZE [0.0, 1.0]
+static auto distance_exponent = 3.0;          // OPTIMIZE LOG [0.5, 8.0]
+static auto n_small_core_candidates = 2;      // OPTIMIZE [1, 4]
+static auto start_temperature = 0.5;          // OPTIMIZE LOG [5.0, 0.2]
+static auto end_temperature = 0.5;            // OPTIMIZE LOG [5.0, 0.01]
+static auto annealing_param_a = 0.0;          // OPTIMIZE [-15.0, 15.0]
+static auto annealing_param_b = 1.0;          // OPTIMIZE [0.0, 3.0]
+static auto fewer_candidates = 0;             // OPTIMIZE [0, 3]
 
 using namespace std;
 
@@ -604,10 +604,10 @@ static void Init() {
         for (auto i = l; i < r; i++) {
             const auto edge_id = (int)edges.size();
             const auto e = tmp_edges[i];
-            if (candidate_edge_ids_for_each_node[0][e.first].size() <
+            if ((int)candidate_edge_ids_for_each_node[0][e.first].size() <
                 n_candidate_edges_for_node)
                 candidate_edge_ids_for_each_node[0][e.first].push_back(edge_id);
-            if (candidate_edge_ids_for_each_node[1][e.second].size() <
+            if ((int)candidate_edge_ids_for_each_node[1][e.second].size() <
                 n_candidate_edges_for_node)
                 candidate_edge_ids_for_each_node[1][e.second].push_back(
                     edge_id);
@@ -990,7 +990,35 @@ static double ComputeTemperature(const double progress) {
     Visualize(best_solution.blocks);
 }
 
-int main() {
+// static auto n_candidate_edges_for_node = 100; // OPTIMIZE LOG [20, 200]
+// static auto n_new_core_candidates = 2;        // OPTIMIZE [1, 4]
+// static auto remove_2_ratio = 0.5;             // OPTIMIZE [0.0, 1.0]
+// static auto distance_exponent = 3.0;          // OPTIMIZE LOG [0.5, 8.0]
+// static auto n_small_core_candidates = 2;      // OPTIMIZE [1, 4]
+// static auto start_temperature = 0.5;          // OPTIMIZE LOG [5.0, 0.2]
+// static auto end_temperature = 0.5;            // OPTIMIZE LOG [5.0, 0.01]
+// static auto annealing_param_a = 0.0;          // OPTIMIZE [-15.0, 15.0]
+// static auto annealing_param_b = 1.0;          // OPTIMIZE [0.0, 3.0]
+// static auto fewer_candidates = 0;             // OPTIMIZE [0, 3]
+
+void ReadArgs(int argc, const char* const* const argv) {
+    if (argc >= 5) {
+        assert(argc == 10);
+        n_candidate_edges_for_node = atoi(argv[1]);
+        n_new_core_candidates = atoi(argv[2]);
+        remove_2_ratio = atof(argv[2]);
+        distance_exponent = atof(argv[3]);
+        n_small_core_candidates = atoi(argv[4]);
+        start_temperature = atof(argv[5]);
+        end_temperature = atof(argv[6]);
+        annealing_param_a = atof(argv[7]);
+        annealing_param_b = atof(argv[8]);
+        fewer_candidates = atoi(argv[9]);
+    }
+}
+
+int main(const int argc, const char* const* const argv) {
+    ReadArgs(argc, argv);
     Init();
     Solve();
 }
@@ -1003,3 +1031,6 @@ int main() {
 
 // TODO1: チューニング
 //        体積、平均次数
+
+// TODO: 条件分岐
+// TODO: 失敗時の処理
