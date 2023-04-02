@@ -331,7 +331,7 @@ struct EdgeGroup {
 
 static vector<EdgeGroup> edge_groups;
 static constexpr auto kMaxNCandidateEdgesForNode = 200;
-static array<array<Stack<int, kMaxNCandidateEdgesForNode>, 14 * 14 * 14 / 2>, 2>
+static array<array<Stack<int, kMaxNCandidateEdgesForNode>, 14 * 14 * 14>, 2>
     candidate_edge_ids_for_each_node;
 
 static auto mean_degree = 0.0;
@@ -557,7 +557,7 @@ static void Init() {
                     for (b.x = 0; b.x < siz.x; b.x++) {
                         for (b.y = 0; b.y < siz.y; b.y++) {
                             for (b.z = 0; b.z < siz.z; b.z++) {
-                                static auto q = array<Vec3, 14 * 14 * 14 / 2>();
+                                static auto q = array<Vec3, 14 * 14 * 14>();
                                 if (visited[b.x][b.y][b.z])
                                     continue;
                                 visited[b.x][b.y][b.z] = true;
@@ -639,7 +639,7 @@ static void Init() {
          });
 
     // 各頂点に対して、それを含むgroupの中で、サイズが大きい上位何個かを取り出す
-    auto n_candidate_groups = array<array<int, 14 * 14 * 14 / 2>, 2>();
+    auto n_candidate_groups = array<array<int, 14 * 14 * 14>, 2>();
     auto all_candidate_tmp_groups = vector<int>();
 
     for (auto idx_groups = 0; idx_groups < (int)tmp_edge_groups.size();
