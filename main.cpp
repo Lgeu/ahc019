@@ -29,7 +29,7 @@
 static auto n_candidate_edges_for_node = 100;
 static auto n_new_core_candidates = 2;
 static auto remove_2_ratio = 0.5;
-static auto distance_exponent = 3.0;
+static auto distance_exponent = 2.0;
 static auto n_small_core_candidates = 2;
 static auto start_temperature = 0.5;
 static auto end_temperature = 0.5;
@@ -414,110 +414,44 @@ static void Init() {
     if (nodes.size() < 173) {
         if (mean_degree < 3.1592966666666666) {
             // a
-            annealing_param_a = 9.281041735865584;
-            annealing_param_b = 0.755761675873166;
-            distance_exponent = 2.24612681442502;
-            end_temperature = 4.977162666569353;
-            // fewer_candidates = 1;
             n_candidate_edges_for_node = 132;
-            n_new_core_candidates = 3;
-            n_small_core_candidates = 1;
             remove_2_ratio = 0.9218864823439933;
-            start_temperature = 3.379009304048146;
-
-            // annealing_param_a = 12.334226294513964;
-            // annealing_param_b = 0.7247766149339714;
-            // distance_exponent = 1.1437305935889017;
-            // end_temperature = 4.180787408899703;
-            // // fewer_candidates = 0;
-            // n_candidate_edges_for_node = 100;
-            // n_new_core_candidates = 4;
-            // n_small_core_candidates = 2;
-            // remove_2_ratio = 0.9296385303490714;
-            // start_temperature = 1.4442435642986096;
         } else if (mean_degree <= 3.5939) {
             // b
-            annealing_param_a = -3.8036510914898054;
-            annealing_param_b = 0.33247766727849754;
-            distance_exponent = 1.212568753086613;
-            end_temperature = 3.4510828069379693;
-            // fewer_candidates = 2;
             n_candidate_edges_for_node = 150;
-            n_new_core_candidates = 2;
-            n_small_core_candidates = 4;
             remove_2_ratio = 0.7042405590788633;
-            start_temperature = 1.574978192219687;
         } else {
             // c
-            annealing_param_a = 8.983338044665098;
-            annealing_param_b = 0.9746574201506142;
-            distance_exponent = 1.6465702218967575;
-            end_temperature = 3.232549384736448;
-            // fewer_candidates = 0;
             n_candidate_edges_for_node = 161;
-            n_new_core_candidates = 1;
-            n_small_core_candidates = 1;
             remove_2_ratio = 0.056701157366232935;
-            start_temperature = 1.3094862288348152;
         }
         n_new_core_candidates = 2;
         n_small_core_candidates = 2;
-        start_temperature = end_temperature = 3.0;
+        start_temperature = 3.0;
+        end_temperature = 3.0;
     } else if (nodes.size() <= 514) {
         if (mean_degree < 3.8762033333333337) {
             // d
-            // annealing_param_a = -2.3303092964583256;
-            // annealing_param_b = 0.3768737975764036;
-            // distance_exponent = 2.050737183901857;
-            // end_temperature = 1.3518308677803337;
-            // // fewer_candidates = 2;
-            // n_candidate_edges_for_node = 151;
-            // n_new_core_candidates = 4;
-            // n_small_core_candidates = 3;
-            // remove_2_ratio = 0.17200041081790612;
-            // start_temperature = 0.33723406336026057;
             annealing_param_a = -7.181959083657732;
             annealing_param_b = 0.006935683724648756;
-            distance_exponent = 2.9018179948796385;
             end_temperature = 0.7805181254898048;
-            // fewer_candidates = 3;
             n_candidate_edges_for_node = 174;
-            n_new_core_candidates = 4;
-            n_small_core_candidates = 4;
             remove_2_ratio = 0.4720546444669666;
             start_temperature = 2.2426956006292613;
         } else if (mean_degree <= 4.399126666666667) {
             // e
-            // annealing_param_a = -7.304700540663429;
-            // annealing_param_b = 1.8765568688107896;
-            // distance_exponent = 1.3835939206625643;
-            // end_temperature = 0.08018194527887124;
-            // // fewer_candidates = 3;
-            // n_candidate_edges_for_node = 154;
-            // n_new_core_candidates = 3;
-            // n_small_core_candidates = 1;
-            // remove_2_ratio = 0.8894474572080957;
-            // start_temperature = 2.341037539302354;
             annealing_param_a = -4.271183370533636;
             annealing_param_b = 1.537547480976249;
-            distance_exponent = 2.3947755899382566;
             end_temperature = 1.0563753419550566;
-            // fewer_candidates = 2;
             n_candidate_edges_for_node = 124;
-            n_new_core_candidates = 4;
-            n_small_core_candidates = 2;
             remove_2_ratio = 0.9204116097148919;
             start_temperature = 2.5613498004124264;
         } else {
             // f
             annealing_param_a = 2.431448945527027;
             annealing_param_b = 0.02508515581387205;
-            distance_exponent = 1.5765391486410198;
             end_temperature = 2.6682468037906912;
-            // fewer_candidates = 0;
             n_candidate_edges_for_node = 163;
-            n_new_core_candidates = 3;
-            n_small_core_candidates = 4;
             remove_2_ratio = 0.9912314538913594;
             start_temperature = 0.6473180196690247;
         }
@@ -526,65 +460,35 @@ static void Init() {
     } else {
         if (mean_degree < 4.414796666666667) {
             // g
-            // annealing_param_a = -6.380400005651133;
-            // annealing_param_b = 2.228470149170637;
-            // distance_exponent = 2.1486560203398812;
-            // end_temperature = 0.010660882000663285;
-            // // fewer_candidates = 2;
-            // n_candidate_edges_for_node = 122;
-            // n_new_core_candidates = 3;
-            // n_small_core_candidates = 3;
-            // remove_2_ratio = 0.8131230480965274;
-            // start_temperature = 4.4870417435059915;
             annealing_param_a = -9.87155675256468;
             annealing_param_b = 2.1181607666471;
-            distance_exponent = 2.108267547382123;
             end_temperature = 0.48333592195366826;
-            // fewer_candidates = 1;
             n_candidate_edges_for_node = 107;
-            n_new_core_candidates = 4;
-            n_small_core_candidates = 2;
             remove_2_ratio = 0.9733052823543014;
             start_temperature = 4.979551144728833;
         } else if (mean_degree <= 4.83589) {
             // h
-            // annealing_param_a = -12.310859996243202;
-            // annealing_param_b = 2.126039587659437;
-            // distance_exponent = 1.9682861154741456;
-            // end_temperature = 1.2914619194165504;
-            // // fewer_candidates = 2;
-            // n_candidate_edges_for_node = 132;
-            // n_new_core_candidates = 3;
-            // n_small_core_candidates = 2;
-            // remove_2_ratio = 0.9219710652316301;
-            // start_temperature = 1.7308583334921623;
             annealing_param_a = -7.373480788395982;
             annealing_param_b = 2.0054413390420303;
-            distance_exponent = 2.159899232206193;
             end_temperature = 1.3017088526343317;
-            // fewer_candidates = 1;
             n_candidate_edges_for_node = 126;
-            n_new_core_candidates = 4;
-            n_small_core_candidates = 3;
             remove_2_ratio = 0.7291058509744781;
             start_temperature = 2.1674465553345086;
         } else {
             // i
-            annealing_param_a = -4.516681431999736;
-            annealing_param_b = 2.4483226153940274;
-            distance_exponent = 1.6602090852236913;
-            end_temperature = 0.025619046849009397;
-            // fewer_candidates = 3;
-            n_candidate_edges_for_node = 159;
-            n_new_core_candidates = 2;
-            n_small_core_candidates = 4;
-            remove_2_ratio = 0.6151371885651054;
-            start_temperature = 3.0334300991941463;
+            annealing_param_a = -3.3550288393623484;
+            annealing_param_b = 2.162164664274324;
+            end_temperature = 1.1435152636621457;
+            n_candidate_edges_for_node = 148;
+            remove_2_ratio = 0.6341158338628746;
+            start_temperature = 3.3780372808987322;
         }
         fewer_candidates = 1;
         n_new_core_candidates = 3;
         n_small_core_candidates = 3;
     }
+    distance_exponent = 2.0;
+    n_candidate_edges_for_node = 150;
 
     // 辺を構築
     edges.clear();
